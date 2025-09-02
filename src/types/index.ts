@@ -40,7 +40,7 @@ export interface CTRNGResponse {
   service: string;
   src: string;
   data: string;
-  signature: {
+  signature?: {
     value: string;
     pk: string;
     algo?: string;

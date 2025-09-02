@@ -156,6 +156,13 @@ export class CTRNGService {
 
         const data: CTRNGResponse = await response.json();
 
+        if (this.debug) {
+          console.log(
+            "[OrbitportSDK] Raw API response:",
+            JSON.stringify(data, null, 2)
+          );
+        }
+
         // Validate response structure
         this._validateResponse(data);
 
@@ -232,19 +239,30 @@ export class CTRNGService {
       );
     }
 
-    if (!data.signature || typeof data.signature !== "object") {
-      throw new OrbitportSDKError(
-        "Invalid response: missing or invalid signature field",
-        ERROR_CODES.INVALID_RESPONSE
-      );
-    }
+    // Signature is optional - not all responses include it
+    if (data.signature) {
+      if (typeof data.signature !== "object") {
+        throw new OrbitportSDKError(
+          "Invalid response: invalid signature field",
+          ERROR_CODES.INVALID_RESPONSE
+        );
+      }
 
-    const { signature } = data;
-    if (!signature.value || !signature.pk) {
-      throw new OrbitportSDKError(
-        "Invalid response: incomplete signature data",
-        ERROR_CODES.INVALID_RESPONSE
-      );
+      const { signature } = data;
+      if (!signature.value) {
+        throw new OrbitportSDKError(
+          "Invalid response: missing signature value",
+          ERROR_CODES.INVALID_RESPONSE
+        );
+      }
+
+      // Note: pk can be empty string according to API docs
+      if (signature.pk === undefined) {
+        throw new OrbitportSDKError(
+          "Invalid response: missing signature pk field",
+          ERROR_CODES.INVALID_RESPONSE
+        );
+      }
     }
   }
 }
