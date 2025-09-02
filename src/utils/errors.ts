@@ -8,13 +8,13 @@ import type { OrbitportError, APIError } from "../types";
  * Custom error class for Orbitport SDK errors
  */
 export class OrbitportSDKError extends Error implements OrbitportError {
-  public readonly code: string;
+  public readonly code: ErrorCode;
   public readonly status?: number;
   public readonly details?: unknown;
 
   constructor(
     message: string,
-    code: string,
+    code: ErrorCode,
     status?: number,
     details?: unknown
   ) {
@@ -86,7 +86,8 @@ export function createErrorFromAPIResponse(
   apiError: APIError,
   status?: number
 ): OrbitportSDKError {
-  const code = apiError.error_code || ERROR_CODES.API_ERROR;
+  const code: ErrorCode =
+    (apiError.error_code as ErrorCode) || ERROR_CODES.API_ERROR;
   const message = apiError.error_description || apiError.error || "API Error";
 
   return new OrbitportSDKError(message, code, status, apiError.details);
