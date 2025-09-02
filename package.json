@@ -1,0 +1,30 @@
+{
+  "name": "orbitport-sdk",
+  "version": "0.0.1",
+  "description": "SpaceComputer Orbitport SDK",
+  "main": "index.ts",
+  "scripts": {
+    "test": "npm run test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/easonchai/orbitport-sdk.git"
+  },
+  "keywords": [
+    "spacecomputer",
+    "orbitport",
+    "ctrng",
+    "rng",
+    "sdk"
+  ],
+  "author": "Eason Chai",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/easonchai/orbitport-sdk/issues"
+  },
+  "homepage": "https://github.com/easonchai/orbitport-sdk#readme",
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
