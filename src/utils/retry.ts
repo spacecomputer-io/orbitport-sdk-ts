@@ -3,7 +3,7 @@
  */
 
 import type { OrbitportError } from "../types";
-import { OrbitportSDKError, isRetryableError } from "./errors";
+import { isRetryableError } from "./errors";
 
 /**
  * Retry configuration options

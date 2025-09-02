@@ -1,10 +1,23 @@
 {
-  "name": "orbitport-sdk",
+  "name": "@spacecomputer/orbitport-sdk",
   "version": "0.0.1",
-  "description": "SpaceComputer Orbitport SDK",
-  "main": "index.ts",
+  "description": "Official TypeScript SDK for SpaceComputer Orbitport",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
-    "test": "npm run test"
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts --fix",
+    "type-check": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
@@ -15,7 +28,10 @@
     "orbitport",
     "ctrng",
     "rng",
-    "sdk"
+    "sdk",
+    "typescript",
+    "random",
+    "cryptography"
   ],
   "author": "Eason Chai",
   "license": "MIT",
@@ -23,8 +39,21 @@
     "url": "https://github.com/easonchai/orbitport-sdk/issues"
   },
   "homepage": "https://github.com/easonchai/orbitport-sdk#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.6.0"
+  },
   "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.42.0",
+    "@typescript-eslint/parser": "^8.42.0",
+    "eslint": "^9.34.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
+  },
+  "peerDependencies": {
+    "typescript": ">=4.5.0"
   }
 }
