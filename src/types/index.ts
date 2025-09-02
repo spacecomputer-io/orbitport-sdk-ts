@@ -2,6 +2,8 @@
  * Core types and interfaces for the Orbitport SDK
  */
 
+import type { ErrorCode } from "../utils/errors";
+
 // Configuration interfaces
 export interface OrbitportConfig {
   clientId: string;
@@ -51,7 +53,7 @@ export interface CTRNGRequest {
 
 // Error types
 export interface OrbitportError extends Error {
-  code: string;
+  code: ErrorCode;
   status?: number;
   details?: unknown;
 }
