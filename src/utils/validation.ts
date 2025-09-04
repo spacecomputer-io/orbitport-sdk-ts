@@ -254,7 +254,10 @@ export function sanitizeCTRNGRequest(
 ): CTRNGRequest {
   const validation = validateCTRNGRequest(request);
   if (!validation.valid) {
-    throw createValidationError("Invalid cTRNG request", validation.errors);
+    throw createValidationError(
+      validation.errors.join(", "),
+      validation.errors
+    );
   }
 
   return {
