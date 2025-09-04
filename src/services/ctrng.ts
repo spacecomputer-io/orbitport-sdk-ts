@@ -170,7 +170,6 @@ export class CTRNGService {
         const metadata: ResponseMetadata = {
           timestamp: Date.now(),
           ...(requestId && { request_id: requestId }),
-          cache_hit: response.headers.get("x-cache") === "HIT",
         };
 
         return {

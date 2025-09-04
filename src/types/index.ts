@@ -86,7 +86,6 @@ export interface RequestOptions {
 export interface ResponseMetadata {
   timestamp: number;
   request_id?: string;
-  cache_hit?: boolean;
 }
 
 // Storage interfaces for different environments
