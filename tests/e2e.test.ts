@@ -29,7 +29,7 @@ describe("Orbitport SDK E2E Tests", () => {
         clientId,
         clientSecret,
       },
-      debug: true, // Enable debug logging for tests
+      // debug: true, // Enable debug logging for tests
     });
   });
 
@@ -280,7 +280,7 @@ describe("Orbitport SDK E2E Tests", () => {
           clientSecret,
           apiUrl: "https://invalid-api-url-that-does-not-exist.com",
         },
-        debug: true, // Enable debug for error testing
+        // debug: true, // Enable debug for error testing
       });
 
       try {
