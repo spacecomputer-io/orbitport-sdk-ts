@@ -1,0 +1,472 @@
+/**
+ * IPFS service for accessing beacon data from IPFS/IPNS
+ */
+
+// @ts-ignore - IPFS client types may not be available
+import { create as createIpfsClient } from "ipfs-http-client";
+import type {
+  BeaconData,
+  IPFSSource,
+  BeaconComparison,
+  IPFSConfig,
+  IPFSBeaconRequest,
+  ServiceResult,
+  ResponseMetadata,
+  RequestOptions,
+} from "../types";
+import { OrbitportSDKError, ERROR_CODES } from "../utils/errors";
+import { withRetry, RETRY_STRATEGIES } from "../utils/retry";
+
+/**
+ * IPFS service class for beacon data access
+ */
+export class IPFSService {
+  private config: IPFSConfig;
+  private gateway: string;
+  private apiClient: any;
+  private debug: boolean;
+
+  constructor(config: IPFSConfig = {}, debug: boolean = false) {
+    this.config = {
+      gateway: "https://ipfs.io",
+      apiUrl: "http://65.109.2.230:5001",
+      timeout: 30000,
+      enableFallback: true,
+      ...config,
+    };
+    this.gateway = this.config.gateway!;
+    this.debug = debug;
+
+    // Initialize IPFS API client if API URL is provided
+    if (this.config.apiUrl) {
+      try {
+        this.apiClient = createIpfsClient({ url: this.config.apiUrl });
+      } catch (error) {
+        if (this.debug) {
+          console.warn(
+            "[OrbitportSDK] Failed to initialize IPFS API client:",
+            error
+          );
+        }
+      }
+    }
+
+    if (this.debug) {
+      console.log("[OrbitportSDK] IPFS service initialized with config:", {
+        gateway: this.gateway,
+        apiUrl: this.config.apiUrl,
+        enableFallback: this.config.enableFallback,
+      });
+    }
+  }
+
+  /**
+   * Validates if a path is a valid IPFS/IPNS path
+   * @param path - Path to validate
+   * @returns True if valid IPFS/IPNS path
+   */
+  private isValidPath(path: string): boolean {
+    return path.startsWith("/ipns/") || path.startsWith("/ipfs/");
+  }
+
+  /**
+   * Reads beacon data from IPFS gateway
+   * @param path - IPFS/IPNS path
+   * @param timeout - Request timeout
+   * @returns Promise resolving to beacon data
+   */
+  private async readViaGateway(
+    path: string,
+    _timeout: number = this.config.timeout!
+  ): Promise<IPFSSource> {
+    const url = `${this.gateway}${path}?bust=${Date.now()}`;
+
+    if (this.debug) {
+      console.log("[OrbitportSDK] Reading from gateway:", url);
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), _timeout);
+
+      try {
+        const response = await fetch(url, {
+          headers: { "Cache-Control": "no-cache" },
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(
+            `Gateway ${this.gateway} returned ${response.status}`
+          );
+        }
+
+        const text = await response.text();
+        return {
+          source: `gateway:${this.gateway}`,
+          text,
+        };
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      }
+    } catch (error) {
+      return {
+        source: `gateway:${this.gateway}`,
+        error: error instanceof Error ? error.message : "Unknown gateway error",
+      };
+    }
+  }
+
+  /**
+   * Reads beacon data from IPFS API
+   * @param path - IPFS/IPNS path
+   * @param timeout - Request timeout
+   * @returns Promise resolving to beacon data
+   */
+  private async readViaApi(
+    path: string,
+    _timeout: number = this.config.timeout!
+  ): Promise<IPFSSource> {
+    if (!this.apiClient) {
+      return {
+        source: `api:${this.config.apiUrl}`,
+        error: "IPFS API client not initialized",
+      };
+    }
+
+    if (this.debug) {
+      console.log("[OrbitportSDK] Reading from API:", path);
+    }
+
+    try {
+      let effective = path;
+
+      // Resolve IPNS to IPFS path if needed
+      if (path.startsWith("/ipns/")) {
+        const resolved = this.apiClient.name.resolve(path);
+        let last;
+        for await (const p of resolved) last = p;
+        if (!last) throw new Error("API resolve failed");
+        effective = last.trim();
+      }
+
+      // Read content from IPFS
+      const chunks = [];
+      for await (const chunk of this.apiClient.cat(effective)) {
+        chunks.push(chunk);
+      }
+
+      const text = Buffer.concat(chunks).toString();
+      return {
+        source: `api:${this.config.apiUrl}`,
+        text,
+      };
+    } catch (error) {
+      return {
+        source: `api:${this.config.apiUrl}`,
+        error: error instanceof Error ? error.message : "Unknown API error",
+      };
+    }
+  }
+
+  /**
+   * Parses beacon JSON data
+   * @param jsonText - Raw JSON text
+   * @returns Parsed beacon data
+   */
+  private parseBeacon(jsonText: string): BeaconData {
+    const obj = JSON.parse(jsonText);
+
+    if (
+      !obj ||
+      typeof obj !== "object" ||
+      !obj.data ||
+      typeof obj.data !== "object"
+    ) {
+      throw new Error("Unexpected beacon JSON structure");
+    }
+
+    const { previous } = obj;
+    const { sequence, timestamp, ctrng } = obj.data;
+
+    // Convert timestamp to ISO string if it's a Unix timestamp
+    const iso =
+      typeof timestamp === "number" && timestamp < 1e12
+        ? new Date(timestamp * 1000).toISOString()
+        : String(timestamp);
+
+    return {
+      previous,
+      sequence,
+      timestamp: iso,
+      ctrng: Array.isArray(ctrng) ? ctrng : [],
+    };
+  }
+
+  /**
+   * Compares beacon data from different sources
+   * @param gateway - Gateway beacon data
+   * @param api - API beacon data
+   * @returns Comparison result
+   */
+  private compareBeaconData(
+    gateway: BeaconData | null,
+    api: BeaconData | null
+  ): BeaconComparison {
+    const match =
+      gateway &&
+      api &&
+      gateway.sequence === api.sequence &&
+      gateway.previous === api.previous;
+
+    const differences =
+      gateway && api && !match
+        ? {
+            sequence:
+              gateway.sequence !== api.sequence
+                ? {
+                    gateway: gateway.sequence,
+                    api: api.sequence,
+                  }
+                : undefined,
+            previous:
+              gateway.previous !== api.previous
+                ? {
+                    gateway: gateway.previous || "",
+                    api: api.previous || "",
+                  }
+                : undefined,
+          }
+        : undefined;
+
+    return {
+      gateway,
+      api,
+      match: !!match,
+      differences,
+    };
+  }
+
+  /**
+   * Reads beacon data from multiple sources
+   * @param path - IPFS/IPNS path
+   * @param sources - Sources to read from
+   * @param timeout - Request timeout
+   * @returns Promise resolving to beacon data from all sources
+   */
+  private async readFromSources(
+    path: string,
+    sources: ("gateway" | "api")[] = ["gateway", "api"],
+    timeout: number = this.config.timeout!
+  ): Promise<IPFSSource[]> {
+    const tasks: Promise<IPFSSource>[] = [];
+
+    if (sources.includes("gateway")) {
+      tasks.push(this.readViaGateway(path, timeout));
+    }
+
+    if (sources.includes("api")) {
+      tasks.push(this.readViaApi(path, timeout));
+    }
+
+    return Promise.all(tasks);
+  }
+
+  /**
+   * Gets beacon data from IPFS/IPNS
+   * @param request - Beacon request parameters
+   * @param options - Request options
+   * @returns Promise resolving to beacon data
+   */
+  async getBeacon(
+    request: IPFSBeaconRequest,
+    options: RequestOptions = {}
+  ): Promise<ServiceResult<BeaconData | BeaconComparison>> {
+    const { path, sources = ["both"], enableComparison = false } = request;
+    const requestOptions = {
+      timeout: options.timeout || this.config.timeout!,
+      retries: options.retries || 3,
+    };
+
+    if (!this.isValidPath(path)) {
+      throw new OrbitportSDKError(
+        "Invalid path: must start with /ipns/ or /ipfs/",
+        ERROR_CODES.INVALID_RESPONSE
+      );
+    }
+
+    if (this.debug) {
+      console.log("[OrbitportSDK] Getting beacon data for path:", path);
+    }
+
+    try {
+      const result = await withRetry(
+        async () => {
+          const sourceList = sources.includes("both")
+            ? (["gateway", "api"] as ("gateway" | "api")[])
+            : (sources as ("gateway" | "api")[]);
+          const sources_data = await this.readFromSources(
+            path,
+            sourceList,
+            requestOptions.timeout
+          );
+
+          // Check for errors
+          const errors = sources_data.filter((s) => s.error);
+          if (errors.length === sources_data.length) {
+            throw new OrbitportSDKError(
+              `All sources failed: ${errors.map((e) => e.error).join(", ")}`,
+              ERROR_CODES.NETWORK_ERROR
+            );
+          }
+
+          // Parse successful sources
+          const parsedData: { source: string; data: BeaconData }[] = [];
+          for (const source of sources_data) {
+            if (source.text) {
+              try {
+                const data = this.parseBeacon(source.text);
+                parsedData.push({ source: source.source, data });
+              } catch (error) {
+                if (this.debug) {
+                  console.warn(
+                    `[OrbitportSDK] Parse error for ${source.source}:`,
+                    error
+                  );
+                }
+              }
+            }
+          }
+
+          if (parsedData.length === 0) {
+            throw new OrbitportSDKError(
+              "No valid beacon data found from any source",
+              ERROR_CODES.INVALID_RESPONSE
+            );
+          }
+
+          // Return single result or comparison
+          if (enableComparison && parsedData.length >= 2) {
+            const gateway =
+              parsedData.find((p) => p.source.includes("gateway"))?.data ||
+              null;
+            const api =
+              parsedData.find((p) => p.source.includes("api"))?.data || null;
+            return this.compareBeaconData(gateway, api);
+          } else {
+            // Return the first successful result
+            return parsedData[0].data;
+          }
+        },
+        {
+          ...RETRY_STRATEGIES.standard,
+          maxAttempts: requestOptions.retries,
+        },
+        (error, attempt) => {
+          if (this.debug) {
+            console.warn(
+              `[OrbitportSDK] Beacon request attempt ${attempt} failed:`,
+              error.message
+            );
+          }
+        }
+      );
+
+      const metadata: ResponseMetadata = {
+        timestamp: Date.now(),
+      };
+
+      return {
+        data: result,
+        metadata,
+        success: true,
+      };
+    } catch (error) {
+      if (this.debug) {
+        console.error("[OrbitportSDK] Beacon request failed:", error);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Gets beacon data with automatic fallback
+   * @param path - IPFS/IPNS path
+   * @param options - Request options
+   * @returns Promise resolving to beacon data
+   */
+  async getBeaconWithFallback(
+    path: string,
+    options: RequestOptions = {}
+  ): Promise<ServiceResult<BeaconData>> {
+    if (!this.config.enableFallback) {
+      const result = await this.getBeacon({ path }, options);
+      if ("sequence" in result.data) {
+        return result as ServiceResult<BeaconData>;
+      }
+      throw new OrbitportSDKError(
+        "Unexpected response type from getBeacon",
+        ERROR_CODES.INVALID_RESPONSE
+      );
+    }
+
+    // Try gateway first, then API as fallback
+    try {
+      const result = await this.getBeacon(
+        { path, sources: ["gateway"] },
+        options
+      );
+      if ("sequence" in result.data) {
+        return result as ServiceResult<BeaconData>;
+      }
+      throw new OrbitportSDKError(
+        "Unexpected response type from gateway",
+        ERROR_CODES.INVALID_RESPONSE
+      );
+    } catch (error) {
+      if (this.debug) {
+        console.log("[OrbitportSDK] Gateway failed, trying API fallback");
+      }
+      const result = await this.getBeacon({ path, sources: ["api"] }, options);
+      if ("sequence" in result.data) {
+        return result as ServiceResult<BeaconData>;
+      }
+      throw new OrbitportSDKError(
+        "Unexpected response type from API",
+        ERROR_CODES.INVALID_RESPONSE
+      );
+    }
+  }
+
+  /**
+   * Updates IPFS configuration
+   * @param newConfig - New IPFS configuration
+   */
+  updateConfig(newConfig: Partial<IPFSConfig>): void {
+    this.config = { ...this.config, ...newConfig };
+
+    if (newConfig.gateway) {
+      this.gateway = newConfig.gateway;
+    }
+
+    if (newConfig.apiUrl) {
+      try {
+        this.apiClient = createIpfsClient({ url: newConfig.apiUrl });
+      } catch (error) {
+        if (this.debug) {
+          console.warn(
+            "[OrbitportSDK] Failed to update IPFS API client:",
+            error
+          );
+        }
+      }
+    }
+
+    if (this.debug) {
+      console.log("[OrbitportSDK] IPFS configuration updated:", this.config);
+    }
+  }
+}
