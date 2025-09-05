@@ -18,22 +18,31 @@ export function validateConfig(
 ): ValidationResult {
   const errors: string[] = [];
 
-  if (!config.clientId) {
-    errors.push("clientId is required");
-  } else if (
-    typeof config.clientId !== "string" ||
-    config.clientId.trim().length === 0
-  ) {
-    errors.push("clientId must be a non-empty string");
+  // Credentials are optional - if provided, they must be valid
+  if (config.clientId !== undefined) {
+    if (
+      typeof config.clientId !== "string" ||
+      config.clientId.trim().length === 0
+    ) {
+      errors.push("clientId must be a non-empty string");
+    }
   }
 
-  if (!config.clientSecret) {
-    errors.push("clientSecret is required");
-  } else if (
-    typeof config.clientSecret !== "string" ||
-    config.clientSecret.trim().length === 0
+  if (config.clientSecret !== undefined) {
+    if (
+      typeof config.clientSecret !== "string" ||
+      config.clientSecret.trim().length === 0
+    ) {
+      errors.push("clientSecret must be a non-empty string");
+    }
+  }
+
+  // If one credential is provided, both must be provided
+  if (
+    (config.clientId && !config.clientSecret) ||
+    (!config.clientId && config.clientSecret)
   ) {
-    errors.push("clientSecret must be a non-empty string");
+    errors.push("Both clientId and clientSecret must be provided together");
   }
 
   if (config.authUrl) {
@@ -87,8 +96,20 @@ export function validateCTRNGRequest(
 ): ValidationResult {
   const errors: string[] = [];
 
-  if (request.src && !["trng", "rng"].includes(request.src)) {
-    errors.push("src must be one of: trng, rng");
+  if (request.src && !["trng", "rng", "ipfs"].includes(request.src)) {
+    errors.push("src must be one of: trng, rng, ipfs");
+  }
+
+  if (request.src === "ipfs" && request.beaconPath) {
+    if (
+      typeof request.beaconPath !== "string" ||
+      (!request.beaconPath.startsWith("/ipns/") &&
+        !request.beaconPath.startsWith("/ipfs/"))
+    ) {
+      errors.push(
+        "beaconPath must be a valid IPFS/IPNS path starting with /ipns/ or /ipfs/"
+      );
+    }
   }
 
   return {
@@ -204,13 +225,22 @@ export function sanitizeConfig(
   }
 
   return {
-    clientId: config.clientId!.trim(),
-    clientSecret: config.clientSecret!.trim(),
+    clientId: config.clientId?.trim(),
+    clientSecret: config.clientSecret?.trim(),
     authUrl: config.authUrl || getDefaultAuthUrl(),
     apiUrl: config.apiUrl || getDefaultApiUrl(),
     timeout: config.timeout || 30000,
     retryAttempts: config.retryAttempts || 3,
     retryDelay: config.retryDelay || 1000,
+    ipfs: {
+      gateway: "https://ipfs.io",
+      apiUrl: "http://65.109.2.230:5001",
+      timeout: 30000,
+      enableFallback: true,
+      defaultBeaconPath:
+        "/ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe",
+      ...config.ipfs,
+    },
   };
 }
 
@@ -262,5 +292,6 @@ export function sanitizeCTRNGRequest(
 
   return {
     src: request.src || "trng",
+    beaconPath: request.beaconPath,
   };
 }
