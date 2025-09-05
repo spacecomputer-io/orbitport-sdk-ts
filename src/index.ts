@@ -18,6 +18,7 @@ export * from "./utils/validation";
 // Export services
 export { AuthService } from "./services/auth";
 export { CTRNGService } from "./services/ctrng";
+export { IPFSService } from "./services/ipfs";
 
 // Main SDK class
 import type {
@@ -29,6 +30,7 @@ import type {
 } from "./types";
 import { AuthService } from "./services/auth";
 import { CTRNGService } from "./services/ctrng";
+import { IPFSService } from "./services/ipfs";
 import { createDefaultStorage } from "./storage";
 import { sanitizeConfig } from "./utils/validation";
 
@@ -39,12 +41,20 @@ import { sanitizeConfig } from "./utils/validation";
  * ```typescript
  * import { OrbitportSDK } from '@spacecomputer/orbitport-sdk';
  *
+ * // With API credentials (tries API first, falls back to IPFS)
  * const sdk = new OrbitportSDK({
- *   clientId: 'your-client-id',
- *   clientSecret: 'your-client-secret'
+ *   config: {
+ *     clientId: 'your-client-id',
+ *     clientSecret: 'your-client-secret'
+ *   }
  * });
  *
- * // Generate random data
+ * // Without API credentials (uses IPFS only)
+ * const sdk = new OrbitportSDK({
+ *   config: {}
+ * });
+ *
+ * // Generate random data (always reads from both IPFS sources and compares)
  * const result = await sdk.ctrng.random();
  * console.log(result.data);
  * ```
@@ -53,6 +63,7 @@ export class OrbitportSDK {
   private config: OrbitportConfig;
   private authService: AuthService;
   private ctrngService: CTRNGService;
+  private ipfsService: IPFSService;
   private debug: boolean;
 
   /**
@@ -76,10 +87,12 @@ export class OrbitportSDK {
       this.debug
     );
 
+    this.ipfsService = new IPFSService(this.config.ipfs || {}, this.debug);
+
     this.ctrngService = new CTRNGService(
-      this.config.apiUrl!,
+      this.config,
       () => this.authService.getValidToken(),
-      this.config.timeout,
+      this.ipfsService,
       this.debug
     );
 
@@ -97,18 +110,34 @@ export class OrbitportSDK {
    *
    * @example
    * ```typescript
-   * // Generate random data using default source (trng)
+   * // Generate random data (API first if credentials provided, then IPFS fallback)
    * const result = await sdk.ctrng.random();
    *
-   * // Generate random data with specific source
+   * // Generate random data with specific API source
    * const result = await sdk.ctrng.random({ src: 'rng' });
+   *
+   * // Generate random data from IPFS beacon only
+   * const result = await sdk.ctrng.random({ src: 'ipfs' });
+   *
+   * // Generate random data from specific IPFS beacon
+   * const result = await sdk.ctrng.random({
+   *   src: 'ipfs',
+   *   beaconPath: '/ipns/your-beacon-cid'
+   * });
    * ```
    */
   get ctrng() {
     return {
       /**
        * Generates true random numbers using cosmic sources
-       * @param request - Request parameters (src: "trng" or "rng", defaults to "trng")
+       *
+       * Behavior:
+       * - If API credentials provided: tries API first, falls back to IPFS
+       * - If no API credentials: uses IPFS only
+       * - IPFS always reads from both gateway and API sources and compares them
+       * - Returns only the first cTRNG value from the beacon
+       *
+       * @param request - Request parameters (src: "trng", "rng", or "ipfs")
        * @param options - Request options (timeout, retries, headers)
        * @returns Promise resolving to ServiceResult with CTRNGResponse
        */
@@ -165,7 +194,11 @@ export class OrbitportSDK {
    * ```typescript
    * sdk.updateConfig({
    *   environment: 'staging',
-   *   timeout: 60000
+   *   timeout: 60000,
+   *   ipfs: {
+   *     gateway: 'https://gateway.pinata.cloud',
+   *     apiUrl: 'https://api.pinata.cloud'
+   *   }
    * });
    * ```
    */
@@ -173,6 +206,12 @@ export class OrbitportSDK {
     const updatedConfig = sanitizeConfig({ ...this.config, ...newConfig });
     this.config = updatedConfig;
     this.authService.updateConfig(updatedConfig);
+
+    // Update IPFS configuration if provided
+    if (newConfig.ipfs) {
+      this.ctrngService.updateIPFSConfig(newConfig.ipfs);
+      this.ipfsService.updateConfig(newConfig.ipfs);
+    }
 
     if (this.debug) {
       console.log("[OrbitportSDK] Configuration updated:", {

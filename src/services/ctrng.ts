@@ -8,6 +8,7 @@ import type {
   ServiceResult,
   ResponseMetadata,
   RequestOptions,
+  OrbitportConfig,
 } from "../types";
 import {
   OrbitportSDKError,
@@ -15,33 +16,33 @@ import {
   createErrorFromAPIResponse,
   createNetworkError,
 } from "../utils/errors";
-import { withRetry, RETRY_STRATEGIES } from "../utils/retry";
 import { sanitizeCTRNGRequest } from "../utils/validation";
+import { IPFSService } from "./ipfs";
 
 /**
  * cTRNG service class
  */
 export class CTRNGService {
-  private apiUrl: string;
+  private config: OrbitportConfig;
   private getToken: () => Promise<string | null>;
-  private timeout: number;
   private debug: boolean;
+  private ipfsService: IPFSService;
 
   constructor(
-    apiUrl: string,
+    config: OrbitportConfig,
     getToken: () => Promise<string | null>,
-    timeout: number = 30000,
+    ipfsService: IPFSService,
     debug: boolean = false
   ) {
-    this.apiUrl = apiUrl;
+    this.config = config;
     this.getToken = getToken;
-    this.timeout = timeout;
     this.debug = debug;
+    this.ipfsService = ipfsService;
   }
 
   /**
    * Generates true random numbers using cosmic sources
-   * @param request - Request parameters (src: "trng" or "rng", defaults to "trng")
+   * @param request - Request parameters (src: "trng", "rng", or "ipfs")
    * @param options - Request options (timeout, retries, headers)
    * @returns Promise resolving to ServiceResult with CTRNGResponse
    */
@@ -51,7 +52,7 @@ export class CTRNGService {
   ): Promise<ServiceResult<CTRNGResponse>> {
     const sanitizedRequest = sanitizeCTRNGRequest(request);
     const requestOptions = {
-      timeout: options.timeout || this.timeout,
+      timeout: options.timeout || this.config.timeout!,
       retries: options.retries || 3,
       headers: options.headers || {},
     };
@@ -64,25 +65,31 @@ export class CTRNGService {
     }
 
     try {
-      const result = await withRetry(
-        async () => {
-          return await this._makeRequest(sanitizedRequest, requestOptions);
-        },
-        {
-          ...RETRY_STRATEGIES.standard,
-          maxAttempts: requestOptions.retries,
-        },
-        (error, attempt) => {
+      // If src is "ipfs", use IPFS beacon
+      if (sanitizedRequest.src === "ipfs") {
+        return await this._getFromIPFSBeacon(sanitizedRequest, requestOptions);
+      }
+
+      // If we have API credentials, try API first, then IPFS fallback
+      if (this.config.clientId && this.config.clientSecret) {
+        try {
+          return await this._getFromAPI(sanitizedRequest, requestOptions);
+        } catch (apiError) {
           if (this.debug) {
-            console.warn(
-              `[OrbitportSDK] cTRNG request attempt ${attempt} failed:`,
-              error.message
+            console.log(
+              "[OrbitportSDK] API failed, trying IPFS fallback:",
+              apiError instanceof Error ? apiError.message : String(apiError)
             );
           }
+          return await this._getFromIPFSBeacon(
+            sanitizedRequest,
+            requestOptions
+          );
         }
-      );
-
-      return result;
+      } else {
+        // No API credentials, use IPFS only
+        return await this._getFromIPFSBeacon(sanitizedRequest, requestOptions);
+      }
     } catch (error) {
       if (this.debug) {
         console.error("[OrbitportSDK] cTRNG generation failed:", error);
@@ -92,12 +99,9 @@ export class CTRNGService {
   }
 
   /**
-   * Makes the actual API request
-   * @param request - Sanitized CTRNG request parameters
-   * @param options - Request options
-   * @returns Promise resolving to ServiceResult with CTRNGResponse
+   * Gets random data from API
    */
-  private async _makeRequest(
+  private async _getFromAPI(
     request: CTRNGRequest,
     options: RequestOptions
   ): Promise<ServiceResult<CTRNGResponse>> {
@@ -109,18 +113,18 @@ export class CTRNGService {
       );
     }
 
-    const url = `${this.apiUrl}/api/v1/services/trng`;
+    const url = `${this.config.apiUrl}/api/v1/services/trng`;
     const queryParams = new URLSearchParams();
 
     // Add src parameter if specified (defaults to "trng")
-    if (request.src) {
+    if (request.src && request.src !== "ipfs") {
       queryParams.append("src", request.src);
     }
 
     const fullUrl = queryParams.toString() ? `${url}?${queryParams}` : url;
 
     if (this.debug) {
-      console.log("[OrbitportSDK] Making cTRNG request to:", fullUrl);
+      console.log("[OrbitportSDK] Making API request to:", fullUrl);
     }
 
     try {
@@ -206,6 +210,121 @@ export class CTRNGService {
   }
 
   /**
+   * Gets random data from IPFS beacon (always reads from both sources and compares)
+   */
+  private async _getFromIPFSBeacon(
+    request: CTRNGRequest,
+    options: RequestOptions
+  ): Promise<ServiceResult<CTRNGResponse>> {
+    const beaconPath =
+      request.beaconPath || this.config.ipfs?.defaultBeaconPath;
+
+    if (!beaconPath) {
+      throw new OrbitportSDKError(
+        "No beacon path provided and no default beacon path configured",
+        ERROR_CODES.INVALID_REQUEST
+      );
+    }
+
+    if (this.debug) {
+      console.log("[OrbitportSDK] Reading from BOTH IPFS sources:", {
+        gateway: this.config.ipfs?.gateway,
+        api: this.config.ipfs?.apiUrl,
+        path: beaconPath,
+      });
+    }
+
+    try {
+      // Always read from both sources and compare (like beacon.js)
+      const ipfsResult = await this.ipfsService.getBeacon(
+        {
+          path: beaconPath,
+          sources: ["both"],
+          enableComparison: true,
+          timeout: options.timeout,
+        },
+        options
+      );
+
+      // Handle comparison result
+      if ("match" in ipfsResult.data) {
+        const beaconData = ipfsResult.data.gateway || ipfsResult.data.api;
+        if (!beaconData) {
+          throw new OrbitportSDKError(
+            "No valid beacon data found from any source",
+            ERROR_CODES.INVALID_RESPONSE
+          );
+        }
+
+        // Log comparison results
+        if (this.debug) {
+          if (ipfsResult.data.match) {
+            console.log(
+              "[OrbitportSDK] ✓ Gateway and API agree on sequence/previous"
+            );
+          } else {
+            console.log(
+              "[OrbitportSDK] ⚠ Difference detected:",
+              ipfsResult.data.differences
+            );
+          }
+        }
+
+        // Convert to CTRNGResponse format and return only first cTRNG value
+        const ctrngValue = beaconData.ctrng[0];
+        if (ctrngValue === undefined) {
+          throw new OrbitportSDKError(
+            "No cTRNG values found in beacon data",
+            ERROR_CODES.INVALID_RESPONSE
+          );
+        }
+
+        const ctrngResponse: CTRNGResponse = {
+          service: "ipfs-beacon",
+          src: "ipfs",
+          data: ctrngValue.toString(),
+          timestamp: beaconData.timestamp,
+          provider: "ipfs-beacon",
+        };
+
+        return {
+          data: ctrngResponse,
+          metadata: ipfsResult.metadata,
+          success: true,
+        };
+      } else {
+        // Single beacon data (fallback)
+        const ctrngValue = ipfsResult.data.ctrng[0];
+        if (ctrngValue === undefined) {
+          throw new OrbitportSDKError(
+            "No cTRNG values found in beacon data",
+            ERROR_CODES.INVALID_RESPONSE
+          );
+        }
+
+        const ctrngResponse: CTRNGResponse = {
+          service: "ipfs-beacon",
+          src: "ipfs",
+          data: ctrngValue.toString(),
+          timestamp: ipfsResult.data.timestamp,
+          provider: "ipfs-beacon",
+        };
+
+        return {
+          data: ctrngResponse,
+          metadata: ipfsResult.metadata,
+          success: true,
+        };
+      }
+    } catch (error) {
+      if (this.debug) {
+        console.error("[OrbitportSDK] IPFS beacon request failed:", error);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Validates the cTRNG response structure
    * @param data - Response data to validate
    */
@@ -263,5 +382,13 @@ export class CTRNGService {
         );
       }
     }
+  }
+
+  /**
+   * Updates IPFS configuration
+   * @param ipfsConfig - New IPFS configuration
+   */
+  updateIPFSConfig(ipfsConfig: any): void {
+    this.ipfsService.updateConfig(ipfsConfig);
   }
 }

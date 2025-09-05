@@ -13,91 +13,118 @@ npm install @spacecomputer/orbitport-sdk
 ```typescript
 import { OrbitportSDK } from "@spacecomputer/orbitport-sdk";
 
-const sdk = new OrbitportSDK({
+// With API credentials (tries API first, falls back to IPFS)
+const sdkWithAPI = new OrbitportSDK({
   config: {
     clientId: "your-client-id",
     clientSecret: "your-client-secret",
   },
 });
+const resultWithAPI = await sdkWithAPI.ctrng.random();
+console.log(resultWithAPI.data.data);
 
-// Generate random data
-const result = await sdk.ctrng.random();
-console.log(result.data.data); // Access the actual random seed
+// Without API credentials (uses IPFS only)
+const sdkIPFSOnly = new OrbitportSDK({ config: {} });
+const resultIPFSOnly = await sdkIPFSOnly.ctrng.random();
+console.log(resultIPFSOnly.data.data);
 ```
 
 ## Features
 
-- 🌌 **Cosmic True Random Number Generation** - Access to space-based randomness
-- 🔐 **Secure Authentication** - Built-in token management with automatic refresh
-- 🔄 **Automatic Retries** - Resilient network handling with exponential backoff
-- 💾 **Flexible Storage** - Works in browser, Node.js, and custom environments
-- 📦 **TypeScript First** - Full type safety and IntelliSense support
-- 🛡️ **Production Ready** - Comprehensive error handling and validation
-- ⚡ **Rate Limit Aware** - Built-in handling for API rate limits
-- 🧪 **Well Tested** - Comprehensive test suite with 100% e2e test coverage
+- 🌌 **Cosmic True Random Number Generation** - Access space-based randomness via API or IPFS.
+- 🛰️ **IPFS Beacon Support** - Fallback to decentralized IPFS beacons for cTRNG data.
+- 🔄 **Automatic Fallback** - Defaults to API if credentials are provided, with automatic fallback to IPFS.
+- 🔐 **Secure Authentication** - Built-in token management with automatic refresh for API access.
+- 비교 **Source Comparison** - Always reads from both IPFS gateway and API to ensure data integrity, just like `beacon.js`.
+- 💾 **Flexible Storage** - Works in browser, Node.js, and custom environments.
+- 📦 **TypeScript First** - Full type safety and IntelliSense support.
+- 🛡️ **Production Ready** - Comprehensive error handling and validation.
 
 ## API Reference
 
 ### Configuration
 
+The SDK can be initialized with or without API credentials.
+
 ```typescript
 interface OrbitportConfig {
-  clientId: string; // Required: Your client ID
-  clientSecret: string; // Required: Your client secret
-  authUrl?: string; // Optional: Auth server URL (defaults to production)
-  apiUrl?: string; // Optional: API server URL (defaults to production)
+  clientId?: string; // Optional: Your client ID
+  clientSecret?: string; // Optional: Your client secret
+  authUrl?: string; // Optional: Auth server URL
+  apiUrl?: string; // Optional: API server URL
   timeout?: number; // Optional: Request timeout in ms (default: 30000)
   retryAttempts?: number; // Optional: Retry attempts (default: 3)
   retryDelay?: number; // Optional: Retry delay in ms (default: 1000)
+  ipfs?: IPFSConfig; // Optional: Custom IPFS settings
+}
+
+interface IPFSConfig {
+  gateway?: string;
+  apiUrl?: string;
+  timeout?: number;
+  defaultBeaconPath?: string;
 }
 ```
 
-### cTRNG Service
+### cTRNG Service (`sdk.ctrng`)
+
+#### `random(request?, options?)`
+
+Generates true random numbers from the best available source.
+
+**Behavior:**
+
+- If `clientId` and `clientSecret` are provided, it attempts to use the API first. If the API call fails, it automatically falls back to IPFS.
+- If credentials are not provided, it uses IPFS by default.
+- When using IPFS, it always fetches from both the gateway and the API node to compare results for integrity, exactly like the original `beacon.js` script.
 
 ```typescript
-// Generate random data with default source (trng)
+// Automatic source selection (API if configured, otherwise IPFS)
 const result = await sdk.ctrng.random();
 
-// Access the response structure
-console.log(result.data.data); // The actual random seed/string
-console.log(result.data.src); // Source used
+// Force use of IPFS beacon
+const ipfsResult = await sdk.ctrng.random({ src: "ipfs" });
 
-// Generate with specific source
+// Force use of a specific API source (if configured)
 const rngResult = await sdk.ctrng.random({ src: "rng" });
-console.log(rngResult.data.data); // Random data from rng source
+
+// Use a custom IPFS beacon path
+const customBeaconResult = await sdk.ctrng.random({
+  src: "ipfs",
+  beaconPath: "/ipns/your-custom-beacon-cid",
+});
 ```
 
 ### Response Structure
 
-The SDK returns a structured response with the following format:
+All `random()` calls return a consistent response structure:
 
 ```typescript
-interface ServiceResult<T> {
-  data: T; // The actual response data
+interface ServiceResult<CTRNGResponse> {
+  data: CTRNGResponse;
   metadata: {
-    // Request metadata
     timestamp: number;
     request_id?: string;
   };
-  success: boolean; // Always true for successful responses
+  success: boolean;
 }
 
 interface CTRNGResponse {
-  service: string; // Usually shows trng
-  src: string;
-  data: string; // The actual random seed/string
+  service: string; // "trng", "rng", or "ipfs-beacon"
+  src: string; // "trng", "rng", or "ipfs"
+  data: string; // The random value as a string
   signature?: {
-    // Optional cryptographic signature
     value: string;
     pk: string;
-    algo?: string;
-  };
+  }; // API only
   timestamp?: string;
   provider?: string;
 }
 ```
 
-### Authentication
+### Authentication (`sdk.auth`)
+
+Authentication methods are only relevant when using the API.
 
 ```typescript
 // Check if token is valid
@@ -105,9 +132,6 @@ const isValid = await sdk.auth.isTokenValid();
 
 // Get token information
 const tokenInfo = await sdk.auth.getTokenInfo();
-
-// Clear stored token
-await sdk.auth.clearToken();
 ```
 
 ### Error Handling
@@ -121,53 +145,35 @@ try {
   const result = await sdk.ctrng.random();
 } catch (error) {
   if (error instanceof OrbitportSDKError) {
-    console.log("Error code:", error.code);
+    console.log("Error code:", error.code); // e.g., AUTH_FAILED, NETWORK_ERROR
     console.log("Error message:", error.message);
-    console.log("HTTP status:", error.status);
-
-    // Handle specific error types
-    switch (error.code) {
-      case ERROR_CODES.AUTH_FAILED:
-        // Authentication failed
-        break;
-      case ERROR_CODES.RATE_LIMITED:
-        // Rate limited - SDK will automatically retry
-        break;
-      case ERROR_CODES.VALIDATION_ERROR:
-        // Invalid request parameters
-        break;
-      case ERROR_CODES.TIMEOUT:
-        // Request timeout
-        break;
-    }
   }
 }
 ```
 
-### Rate Limiting
+## IPFS Beacon Integration Details
 
-The SDK automatically handles API rate limits with:
+The SDK's IPFS integration is designed to mirror the functionality of the `beacon.js` script, providing robustness and verifiability.
 
-- Built-in retry logic with exponential backoff
-- Automatic delays between requests
-- Graceful degradation when rate limits are hit
+### Default IPFS Configuration
 
-```typescript
-// The SDK will automatically handle rate limiting
-const results = await Promise.all([
-  sdk.ctrng.random(),
-  sdk.ctrng.random(),
-  sdk.ctrng.random(),
-]); // SDK manages timing to avoid rate limits
+- **Gateway**: `https://ipfs.io`
+- **API**: `http://65.109.2.230:5001`
+- **Default Beacon**: `/ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe`
+
+You can override these defaults in the SDK configuration.
+
+### Debug Output
+
+When `debug: true` is enabled, you will see detailed logs, including the IPFS source comparison:
+
 ```
+[OrbitportSDK] Reading from BOTH IPFS sources:
+  - Gateway: https://ipfs.io
+  - API: http://65.109.2.230:5001
+  - Path: /ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe
 
-## Environment Variables
-
-You can override default URLs using environment variables:
-
-```bash
-export ORBITPORT_AUTH_URL=https://your-auth-server.com
-export ORBITPORT_API_URL=https://your-api-server.com
+[OrbitportSDK] ✓ Gateway and API agree on sequence/previous
 ```
 
 ## Development
@@ -185,18 +191,6 @@ npm install
 
 # Build the project
 npm run build
-
-# Watch mode for development
-npm run build:watch
-
-# Lint code
-npm run lint
-
-# Fix linting issues
-npm run lint:fix
-
-# Type check without building
-npm run type-check
 ```
 
 ### Testing
@@ -205,28 +199,9 @@ npm run type-check
 # Run all tests
 npm test
 
-# Run unit tests only
-npm run test:unit
-
 # Run e2e tests (requires valid credentials)
 ORBITPORT_CLIENT_ID="your-id" ORBITPORT_CLIENT_SECRET="your-secret" npm run test:e2e
-
-# Run tests with coverage
-npm run test:coverage
 ```
-
-### Build Scripts
-
-- `npm run build` - Build the project with TypeScript compiler
-- `npm run build:watch` - Build in watch mode
-- `npm run clean` - Remove build artifacts
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint issues automatically
-- `npm run type-check` - Type check without emitting files
-- `npm test` - Run all tests
-- `npm run test:unit` - Run unit tests only
-- `npm run test:e2e` - Run end-to-end tests
-- `npm run test:coverage` - Run tests with coverage report
 
 ## License
 
