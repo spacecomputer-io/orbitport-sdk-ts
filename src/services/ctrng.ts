@@ -9,6 +9,7 @@ import type {
   ResponseMetadata,
   RequestOptions,
   OrbitportConfig,
+  IPFSCTRNGRequest,
 } from "../types";
 import {
   OrbitportSDKError,
@@ -224,7 +225,7 @@ export class CTRNGService {
       );
     }
 
-    const ipfsRequest = request as import("../types").IPFSCTRNGRequest;
+    const ipfsRequest = request as IPFSCTRNGRequest;
     const beaconPath =
       ipfsRequest.beaconPath || this.config.ipfs?.defaultBeaconPath;
 

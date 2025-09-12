@@ -93,6 +93,26 @@ const customBeaconResult = await sdk.ctrng.random({
   src: "ipfs",
   beaconPath: "/ipns/your-custom-beacon-cid",
 });
+
+// Select a specific cTRNG value from the beacon array
+const specificValue = await sdk.ctrng.random({
+  src: "ipfs",
+  index: 2, // Select the 3rd value (0-indexed)
+});
+
+// Get cTRNG from a specific block (traverse back through the chain)
+const blockValue = await sdk.ctrng.random({
+  src: "ipfs",
+  block: 10012, // Get from block 10012
+  index: 1, // Select the 2nd value from that block
+});
+
+// Get latest block with specific index
+const latestValue = await sdk.ctrng.random({
+  src: "ipfs",
+  block: "INF", // Latest block (default)
+  index: 0, // First value (default)
+});
 ```
 
 ### Response Structure
@@ -175,6 +195,51 @@ When `debug: true` is enabled, you will see detailed logs, including the IPFS so
 
 [OrbitportSDK] ✓ Gateway and API agree on sequence/previous
 ```
+
+### cTRNG Array Selection and Block Traversal
+
+IPFS beacons contain arrays of cTRNG values that are posted in batches. Each beacon also has a "previous" property that links to the previous block, creating a chain. The SDK allows you to:
+
+1. **Select specific values** from the cTRNG array using the `index` parameter
+2. **Traverse back through blocks** using the `block` parameter
+
+```typescript
+// Get the first cTRNG value from latest block (default)
+const firstValue = await sdk.ctrng.random({ src: "ipfs" });
+
+// Get the second cTRNG value from latest block (index 1)
+const secondValue = await sdk.ctrng.random({
+  src: "ipfs",
+  index: 1,
+});
+
+// Get cTRNG from a specific block (traverse back through the chain)
+const blockValue = await sdk.ctrng.random({
+  src: "ipfs",
+  block: 10012, // Get from block 10012
+  index: 2, // Select the 3rd value from that block
+});
+
+// Get latest block with specific index
+const latestValue = await sdk.ctrng.random({
+  src: "ipfs",
+  block: "INF", // Latest block (default)
+  index: 0, // First value (default)
+});
+```
+
+**Important Notes:**
+
+- The `index` parameter is 0-based (first value is index 0)
+- The `block` parameter can be:
+  - `"INF"` (default) - Get from the latest block
+  - A number - Traverse back through the chain to that specific block
+- If the requested index exceeds the array length, it will be automatically adjusted using modulo operation
+- For example, if the beacon has 3 values and you request index 5, it will return index 2 (5 % 3 = 2)
+- If the requested block is greater than the current block, an error will be thrown
+- Block traversal follows the "previous" chain, so requesting block 10012 will check the latest block, then traverse back until it finds block 10012
+- This prevents out-of-bounds errors and ensures the request never fails
+- When debug mode is enabled, you'll see detailed logs about block traversal and index adjustments
 
 ## Development
 

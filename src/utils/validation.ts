@@ -7,6 +7,7 @@ import type {
   CTRNGRequest,
   ValidationResult,
   RequestOptions,
+  IPFSCTRNGRequest,
 } from "../types";
 import { createValidationError } from "./errors";
 
@@ -100,14 +101,50 @@ export function validateCTRNGRequest(
     errors.push("src must be one of: trng, rng, ipfs");
   }
 
-  if (request.src === "ipfs" && request.beaconPath) {
-    if (
-      typeof request.beaconPath !== "string" ||
-      (!request.beaconPath.startsWith("/ipns/") &&
-        !request.beaconPath.startsWith("/ipfs/"))
-    ) {
+  // Validate IPFS-specific parameters only if src is "ipfs"
+  if (request.src === "ipfs") {
+    const ipfsRequest = request as IPFSCTRNGRequest;
+
+    if (ipfsRequest.beaconPath) {
+      if (
+        typeof ipfsRequest.beaconPath !== "string" ||
+        (!ipfsRequest.beaconPath.startsWith("/ipns/") &&
+          !ipfsRequest.beaconPath.startsWith("/ipfs/"))
+      ) {
+        errors.push(
+          "beaconPath must be a valid IPFS/IPNS path starting with /ipns/ or /ipfs/"
+        );
+      }
+    }
+
+    if (ipfsRequest.index !== undefined) {
+      if (
+        typeof ipfsRequest.index !== "number" ||
+        !Number.isInteger(ipfsRequest.index) ||
+        ipfsRequest.index < 0
+      ) {
+        errors.push("index must be a non-negative integer");
+      }
+    }
+
+    if (ipfsRequest.block !== undefined) {
+      if (
+        ipfsRequest.block !== "INF" &&
+        (typeof ipfsRequest.block !== "number" ||
+          !Number.isInteger(ipfsRequest.block) ||
+          ipfsRequest.block < 0)
+      ) {
+        errors.push("block must be 'INF' or a non-negative integer");
+      }
+    }
+  } else {
+    // For non-IPFS requests, validate that IPFS-specific parameters are not provided
+    const hasIpfsParams =
+      "beaconPath" in request || "index" in request || "block" in request;
+
+    if (hasIpfsParams) {
       errors.push(
-        "beaconPath must be a valid IPFS/IPNS path starting with /ipns/ or /ipfs/"
+        "IPFS-specific parameters (beaconPath, index, block) can only be used with src: 'ipfs'"
       );
     }
   }
@@ -290,8 +327,18 @@ export function sanitizeCTRNGRequest(
     );
   }
 
-  return {
-    src: request.src || "trng",
-    beaconPath: request.beaconPath,
-  };
+  // Return appropriate request type based on src
+  if (request.src === "ipfs") {
+    const ipfsRequest = request as IPFSCTRNGRequest;
+    return {
+      src: "ipfs",
+      beaconPath: ipfsRequest.beaconPath,
+      block: ipfsRequest.block || "INF",
+      index: ipfsRequest.index || 0,
+    };
+  } else {
+    return {
+      src: request.src || "trng",
+    };
+  }
 }

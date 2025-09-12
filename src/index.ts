@@ -124,6 +124,19 @@ export class OrbitportSDK {
    *   src: 'ipfs',
    *   beaconPath: '/ipns/your-beacon-cid'
    * });
+   *
+   * // Generate random data from specific cTRNG value in beacon array
+   * const result = await sdk.ctrng.random({
+   *   src: 'ipfs',
+   *   index: 2 // Select the 3rd value (0-based)
+   * });
+   *
+   * // Generate random data from specific block with specific index
+   * const result = await sdk.ctrng.random({
+   *   src: 'ipfs',
+   *   block: 10012, // Traverse to block 10012
+   *   index: 1 // Select the 2nd value from that block
+   * });
    * ```
    */
   get ctrng() {
@@ -135,9 +148,14 @@ export class OrbitportSDK {
        * - If API credentials provided: tries API first, falls back to IPFS
        * - If no API credentials: uses IPFS only
        * - IPFS always reads from both gateway and API sources and compares them
-       * - Returns only the first cTRNG value from the beacon
+       * - Returns the selected cTRNG value from the beacon array (default: first value)
        *
-       * @param request - Request parameters (src: "trng", "rng", or "ipfs")
+       * @param request - Request parameters
+       *   - src: "trng", "rng", or "ipfs" (source selection)
+       *   - For IPFS requests (src: "ipfs"):
+       *     - beaconPath: Custom IPFS beacon path
+       *     - block: Block number to traverse to ("INF" for latest, default)
+       *     - index: Index of cTRNG value to select from beacon array (0-based, uses modulo if out of bounds)
        * @param options - Request options (timeout, retries, headers)
        * @returns Promise resolving to ServiceResult with CTRNGResponse
        */
