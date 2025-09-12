@@ -7,10 +7,11 @@
   "files": [
     "dist/**/*",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "examples/**/*"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run clean && tsc",
     "build:watch": "tsc --watch",
     "clean": "rm -rf dist",
     "lint": "eslint src/**/*.ts",
@@ -21,7 +22,21 @@
     "test:coverage": "jest --coverage",
     "test:e2e": "jest tests/e2e.test.ts",
     "test:unit": "jest tests/unit/",
-    "prepublishOnly": "npm run clean && npm run build && npm run test:unit"
+    "prepublishOnly": "npm run clean && npm run build && npm run test:unit",
+    "prepack": "npm run build",
+    "postpack": "npm run clean",
+    "version": "npm run build && git add -A dist",
+    "postversion": "git push && git push --tags",
+    "publish:patch": "npm version patch && npm publish",
+    "publish:minor": "npm version minor && npm publish",
+    "publish:major": "npm version major && npm publish",
+    "publish:beta": "npm version prerelease --preid=beta && npm publish --tag beta",
+    "publish:alpha": "npm version prerelease --preid=alpha && npm publish --tag alpha",
+    "pack": "npm pack",
+    "pack:dry-run": "npm pack --dry-run",
+    "publish:dry-run": "npm publish --dry-run",
+    "docs": "npm run build && typedoc src/index.ts --out docs --theme default",
+    "examples": "npm run build && npx ts-node examples/basic-usage.ts"
   },
   "repository": {
     "type": "git",
@@ -35,7 +50,12 @@
     "sdk",
     "typescript",
     "random",
-    "cryptography"
+    "cryptography",
+    "ipfs",
+    "beacon",
+    "true-random",
+    "quantum",
+    "entropy"
   ],
   "author": "Eason Chai",
   "license": "MIT",
