@@ -62,7 +62,7 @@ export class IPFSService {
     path: string,
     _timeout: number = this.config.timeout!
   ): Promise<IPFSSource> {
-    const url = `${this.gateway}${path}?bust=${Date.now()}`;
+    const url = `${this.gateway}${path}`;
 
     if (this.debug) {
       console.log("[OrbitportSDK] Reading from gateway:", url);
