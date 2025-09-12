@@ -134,7 +134,10 @@ export class IPFSService {
         }/api/v0/name/resolve?arg=${encodeURIComponent(path)}`;
         const resolveResponse = await fetch(resolveUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-cache",
+          },
         });
 
         if (!resolveResponse.ok) {
@@ -154,7 +157,10 @@ export class IPFSService {
       )}`;
       const response = await fetch(catUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-cache",
+        },
       });
 
       if (!response.ok) {

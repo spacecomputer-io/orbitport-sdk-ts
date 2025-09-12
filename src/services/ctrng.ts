@@ -10,6 +10,7 @@ import type {
   RequestOptions,
   OrbitportConfig,
   IPFSCTRNGRequest,
+  APICTRNGRequest,
 } from "../types";
 import {
   OrbitportSDKError,
@@ -51,7 +52,24 @@ export class CTRNGService {
     request: Partial<CTRNGRequest> = {},
     options: RequestOptions = {}
   ): Promise<ServiceResult<CTRNGResponse>> {
-    const sanitizedRequest = sanitizeCTRNGRequest(request);
+    let sanitizedRequest = sanitizeCTRNGRequest(request);
+
+    // If no API credentials are provided, force IPFS mode for clarity
+    if (!this.config.clientId || !this.config.clientSecret) {
+      if (sanitizedRequest.src !== "ipfs") {
+        sanitizedRequest = {
+          src: "ipfs",
+          block: "INF",
+          index: 0,
+        };
+        if (this.debug) {
+          console.log(
+            "[OrbitportSDK] No API credentials provided, switching to IPFS mode"
+          );
+        }
+      }
+    }
+
     const requestOptions = {
       timeout: options.timeout || this.config.timeout!,
       retries: options.retries || 3,
@@ -66,23 +84,33 @@ export class CTRNGService {
     }
 
     try {
-      // If src is "ipfs", use IPFS beacon
       if (sanitizedRequest.src === "ipfs") {
         return await this._getFromIPFSBeacon(sanitizedRequest, requestOptions);
-      }
-
-      // If we have API credentials, try API first, then IPFS fallback
-      if (this.config.clientId && this.config.clientSecret) {
-        try {
-          return await this._getFromAPI(sanitizedRequest, requestOptions);
-        } catch (apiError) {
-          if (this.debug) {
-            console.log(
-              "[OrbitportSDK] API failed, trying IPFS fallback:",
-              apiError instanceof Error ? apiError.message : String(apiError)
-            );
+      } else if (
+        sanitizedRequest.src === "trng" ||
+        sanitizedRequest.src === "rng"
+      ) {
+        // TypeScript knows this is APICTRNGRequest
+        if (this.config.clientId && this.config.clientSecret) {
+          try {
+            return await this._getFromAPI(sanitizedRequest, requestOptions);
+          } catch (apiError) {
+            if (this.debug) {
+              console.log(
+                "[OrbitportSDK] API failed, trying IPFS fallback:",
+                apiError instanceof Error ? apiError.message : String(apiError)
+              );
+            }
+            // Create IPFS request for fallback
+            const ipfsRequest: IPFSCTRNGRequest = {
+              src: "ipfs",
+              block: "INF",
+              index: 0,
+            };
+            return await this._getFromIPFSBeacon(ipfsRequest, requestOptions);
           }
-          // Create IPFS request for fallback
+        } else {
+          // No API credentials, switch to IPFS
           const ipfsRequest: IPFSCTRNGRequest = {
             src: "ipfs",
             block: "INF",
@@ -91,13 +119,11 @@ export class CTRNGService {
           return await this._getFromIPFSBeacon(ipfsRequest, requestOptions);
         }
       } else {
-        // No API credentials, use IPFS only
-        const ipfsRequest: IPFSCTRNGRequest = {
-          src: "ipfs",
-          block: "INF",
-          index: 0,
-        };
-        return await this._getFromIPFSBeacon(ipfsRequest, requestOptions);
+        // Fallback case - should not happen with proper types
+        throw new OrbitportSDKError(
+          "Invalid request type",
+          ERROR_CODES.INVALID_REQUEST
+        );
       }
     } catch (error) {
       if (this.debug) {
@@ -111,7 +137,7 @@ export class CTRNGService {
    * Gets random data from API
    */
   private async _getFromAPI(
-    request: CTRNGRequest,
+    request: APICTRNGRequest,
     options: RequestOptions
   ): Promise<ServiceResult<CTRNGResponse>> {
     const token = await this.getToken();
@@ -126,7 +152,7 @@ export class CTRNGService {
     const queryParams = new URLSearchParams();
 
     // Add src parameter if specified (defaults to "trng")
-    if (request.src && request.src !== "ipfs") {
+    if (request.src) {
       queryParams.append("src", request.src);
     }
 
@@ -277,7 +303,7 @@ export class CTRNGService {
           );
         }
 
-        // Log comparison results
+        // Log comparison results and select the latest data
         if (this.debug) {
           if (ipfsResult.data.match) {
             console.log(
@@ -291,8 +317,35 @@ export class CTRNGService {
           }
         }
 
+        // If there's a difference, pick the one with the latest sequence
+        let selectedBeaconData = beaconData;
+        if (
+          !ipfsResult.data.match &&
+          ipfsResult.data.gateway &&
+          ipfsResult.data.api
+        ) {
+          const gatewaySeq = ipfsResult.data.gateway.sequence;
+          const apiSeq = ipfsResult.data.api.sequence;
+
+          if (gatewaySeq > apiSeq) {
+            selectedBeaconData = ipfsResult.data.gateway;
+            if (this.debug) {
+              console.log(
+                `[OrbitportSDK] Using gateway data (sequence ${gatewaySeq} > API sequence ${apiSeq})`
+              );
+            }
+          } else if (apiSeq > gatewaySeq) {
+            selectedBeaconData = ipfsResult.data.api;
+            if (this.debug) {
+              console.log(
+                `[OrbitportSDK] Using API data (sequence ${apiSeq} > gateway sequence ${gatewaySeq})`
+              );
+            }
+          }
+        }
+
         // Convert to CTRNGResponse format and return selected cTRNG value
-        const ctrngArray = beaconData.ctrng;
+        const ctrngArray = selectedBeaconData.ctrng;
         if (!ctrngArray || ctrngArray.length === 0) {
           throw new OrbitportSDKError(
             "No cTRNG values found in beacon data",
@@ -315,7 +368,7 @@ export class CTRNGService {
           service: "ipfs-beacon",
           src: "ipfs",
           data: ctrngValue.toString(),
-          timestamp: beaconData.timestamp,
+          timestamp: selectedBeaconData.timestamp,
           provider: "ipfs-beacon",
         };
 
