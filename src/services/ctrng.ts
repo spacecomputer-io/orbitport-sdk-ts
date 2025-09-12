@@ -82,14 +82,22 @@ export class CTRNGService {
               apiError instanceof Error ? apiError.message : String(apiError)
             );
           }
-          return await this._getFromIPFSBeacon(
-            sanitizedRequest,
-            requestOptions
-          );
+          // Create IPFS request for fallback
+          const ipfsRequest: IPFSCTRNGRequest = {
+            src: "ipfs",
+            block: "INF",
+            index: 0,
+          };
+          return await this._getFromIPFSBeacon(ipfsRequest, requestOptions);
         }
       } else {
         // No API credentials, use IPFS only
-        return await this._getFromIPFSBeacon(sanitizedRequest, requestOptions);
+        const ipfsRequest: IPFSCTRNGRequest = {
+          src: "ipfs",
+          block: "INF",
+          index: 0,
+        };
+        return await this._getFromIPFSBeacon(ipfsRequest, requestOptions);
       }
     } catch (error) {
       if (this.debug) {

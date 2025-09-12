@@ -2,8 +2,6 @@
  * IPFS service for accessing beacon data from IPFS/IPNS
  */
 
-// @ts-ignore - IPFS client types may not be available
-import { create as createIpfsClient } from "ipfs-http-client";
 import type {
   BeaconData,
   IPFSSource,
@@ -23,7 +21,6 @@ import { withRetry, RETRY_STRATEGIES } from "../utils/retry";
 export class IPFSService {
   private config: IPFSConfig;
   private gateway: string;
-  private apiClient: any;
   private debug: boolean;
 
   constructor(config: IPFSConfig = {}, debug: boolean = false) {
@@ -36,20 +33,6 @@ export class IPFSService {
     };
     this.gateway = this.config.gateway!;
     this.debug = debug;
-
-    // Initialize IPFS API client if API URL is provided
-    if (this.config.apiUrl) {
-      try {
-        this.apiClient = createIpfsClient({ url: this.config.apiUrl });
-      } catch (error) {
-        if (this.debug) {
-          console.warn(
-            "[OrbitportSDK] Failed to initialize IPFS API client:",
-            error
-          );
-        }
-      }
-    }
 
     if (this.debug) {
       console.log("[OrbitportSDK] IPFS service initialized with config:", {
@@ -130,10 +113,10 @@ export class IPFSService {
     path: string,
     _timeout: number = this.config.timeout!
   ): Promise<IPFSSource> {
-    if (!this.apiClient) {
+    if (!this.config.apiUrl) {
       return {
         source: `api:${this.config.apiUrl}`,
-        error: "IPFS API client not initialized",
+        error: "IPFS API URL not configured",
       };
     }
 
@@ -146,20 +129,39 @@ export class IPFSService {
 
       // Resolve IPNS to IPFS path if needed
       if (path.startsWith("/ipns/")) {
-        const resolved = this.apiClient.name.resolve(path);
-        let last;
-        for await (const p of resolved) last = p;
-        if (!last) throw new Error("API resolve failed");
-        effective = last.trim();
+        const resolveUrl = `${
+          this.config.apiUrl
+        }/api/v0/name/resolve?arg=${encodeURIComponent(path)}`;
+        const resolveResponse = await fetch(resolveUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        if (!resolveResponse.ok) {
+          throw new Error(`API resolve failed: ${resolveResponse.status}`);
+        }
+
+        const resolveData = await resolveResponse.json();
+        if (!resolveData.Path) {
+          throw new Error("API resolve failed: no path returned");
+        }
+        effective = resolveData.Path.trim();
       }
 
-      // Read content from IPFS
-      const chunks = [];
-      for await (const chunk of this.apiClient.cat(effective)) {
-        chunks.push(chunk);
+      // Read content from IPFS using direct HTTP call
+      const catUrl = `${this.config.apiUrl}/api/v0/cat?arg=${encodeURIComponent(
+        effective
+      )}`;
+      const response = await fetch(catUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`API cat failed: ${response.status}`);
       }
 
-      const text = chunks.join("");
+      const text = await response.text();
       return {
         source: `api:${this.config.apiUrl}`,
         text,
@@ -592,15 +594,9 @@ export class IPFSService {
     }
 
     if (newConfig.apiUrl) {
-      try {
-        this.apiClient = createIpfsClient({ url: newConfig.apiUrl });
-      } catch (error) {
-        if (this.debug) {
-          console.warn(
-            "[OrbitportSDK] Failed to update IPFS API client:",
-            error
-          );
-        }
+      // No need to update API client since we're using direct HTTP calls
+      if (this.debug) {
+        console.log("[OrbitportSDK] Updated IPFS API URL:", newConfig.apiUrl);
       }
     }
 

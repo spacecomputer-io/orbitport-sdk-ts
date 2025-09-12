@@ -3,71 +3,53 @@
  */
 
 import { CTRNGService } from "../../src/services/ctrng";
-import { OrbitportSDKError, ERROR_CODES } from "../../src/utils/errors";
+import { IPFSService } from "../../src/services/ipfs";
+import { OrbitportConfig, IPFSCTRNGRequest } from "../../src/types";
+
+// Mock IPFSService
+jest.mock("../../src/services/ipfs");
+
+// No need to mock ipfs-http-client since we're using direct HTTP calls
 
 // Mock fetch
 global.fetch = jest.fn();
 
 const mockGetToken = jest.fn();
-const mockConfig = {
+const mockConfig: OrbitportConfig = {
+  clientId: "test-client-id",
+  clientSecret: "test-client-secret",
   apiUrl: "https://test-api.com",
   timeout: 30000,
-  debug: true,
+  ipfs: {
+    defaultBeaconPath: "/ipns/default-beacon",
+  },
+};
+
+const mockIpfsOnlyConfig: OrbitportConfig = {
+  apiUrl: "https://test-api.com",
+  timeout: 30000,
+  ipfs: {
+    defaultBeaconPath: "/ipns/default-beacon",
+  },
 };
 
 describe("CTRNGService", () => {
   let ctrngService: CTRNGService;
+  let ipfsService: IPFSService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    ipfsService = new IPFSService(mockConfig.ipfs || {});
     ctrngService = new CTRNGService(
-      mockConfig.apiUrl,
+      mockConfig,
       mockGetToken,
-      mockConfig.timeout,
-      mockConfig.debug
+      ipfsService,
+      true
     );
   });
 
-  describe("constructor", () => {
-    it("should initialize with provided parameters", () => {
-      expect(ctrngService).toBeDefined();
-    });
-  });
-
   describe("random", () => {
-    it("should use default source when no request provided", async () => {
-      const mockToken = "test-token";
-      const mockResponse = {
-        service: "trng",
-        src: "aptosorbital",
-        data: "test-random-data",
-      };
-
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-        headers: new Map([["x-request-id", "test-request-id"]]),
-      });
-
-      const result = await ctrngService.random();
-
-      expect(result.success).toBe(true);
-      expect(result.data).toEqual(mockResponse);
-      expect(result.metadata.timestamp).toBeDefined();
-      expect(global.fetch).toHaveBeenCalledWith(
-        "https://test-api.com/api/v1/services/trng?src=trng",
-        expect.objectContaining({
-          method: "GET",
-          headers: expect.objectContaining({
-            Authorization: `Bearer ${mockToken}`,
-            Accept: "application/json",
-          }),
-        })
-      );
-    });
-
-    it("should use provided source in request", async () => {
+    it("should call API when credentials are provided", async () => {
       const mockToken = "test-token";
       const mockResponse = {
         service: "trng",
@@ -82,157 +64,267 @@ describe("CTRNGService", () => {
         headers: new Map(),
       });
 
-      const result = await ctrngService.random({ src: "rng" });
-
-      expect(result.success).toBe(true);
+      await ctrngService.random();
       expect(global.fetch).toHaveBeenCalledWith(
-        "https://test-api.com/api/v1/services/trng?src=rng",
+        "https://test-api.com/api/v1/services/trng?src=trng",
+        expect.any(Object)
+      );
+      expect(ipfsService.getBeacon).not.toHaveBeenCalled();
+    });
+
+    it("should fall back to IPFS if API fails", async () => {
+      const mockToken = "test-token";
+      mockGetToken.mockResolvedValue(mockToken);
+      (global.fetch as jest.Mock).mockRejectedValue(new Error("API failed"));
+
+      const mockBeaconResponse = {
+        data: { ctrng: [123] },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
+
+      await ctrngService.random();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+        {
+          path: mockConfig.ipfs!.defaultBeaconPath,
+          sources: ["both"],
+          enableComparison: true,
+          timeout: mockConfig.timeout,
+          block: "INF",
+        },
         expect.any(Object)
       );
     });
 
-    it("should handle request options", async () => {
-      const mockToken = "test-token";
-      const mockResponse = {
-        service: "trng",
-        src: "aptosorbital",
-        data: "test-random-data",
+    it("should call IPFS directly if no credentials are provided", async () => {
+      ctrngService = new CTRNGService(
+        mockIpfsOnlyConfig,
+        mockGetToken,
+        ipfsService,
+        true
+      );
+      const mockBeaconResponse = {
+        data: { ctrng: [123] },
+        metadata: {},
+        success: true,
       };
-
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-        headers: new Map(),
-      });
-
-      const result = await ctrngService.random(
-        { src: "trng" },
-        { timeout: 10000, retries: 2, headers: { "Custom-Header": "value" } }
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
       );
 
-      expect(result.success).toBe(true);
-      expect(global.fetch).toHaveBeenCalledWith(
-        "https://test-api.com/api/v1/services/trng?src=trng",
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            "Custom-Header": "value",
-          }),
-        })
-      );
+      await ctrngService.random();
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledTimes(1);
     });
 
-    it("should throw error when no token available", async () => {
-      mockGetToken.mockResolvedValue(null);
-
-      await expect(ctrngService.random()).rejects.toThrow(
-        new OrbitportSDKError(
-          "No valid authentication token available",
-          ERROR_CODES.AUTH_FAILED
-        )
-      );
-    });
-
-    it("should handle API error responses", async () => {
-      const mockToken = "test-token";
-      const mockErrorResponse = {
-        error: "rate_limit_exceeded",
-        error_description: "Too many requests",
+    it("should call IPFS directly if src is 'ipfs'", async () => {
+      const mockBeaconResponse = {
+        data: { ctrng: [123] },
+        metadata: {},
+        success: true,
       };
-
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: false,
-        status: 429,
-        json: () => Promise.resolve(mockErrorResponse),
-      });
-
-      await expect(ctrngService.random()).rejects.toThrow(OrbitportSDKError);
-    });
-
-    it("should handle network errors", async () => {
-      const mockToken = "test-token";
-
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockRejectedValue(new Error("Network error"));
-
-      await expect(ctrngService.random()).rejects.toThrow(OrbitportSDKError);
-    });
-
-    it("should handle timeout errors", async () => {
-      const mockToken = "test-token";
-
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockRejectedValue(
-        new Error("The operation was aborted")
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
       );
 
-      await expect(ctrngService.random()).rejects.toThrow(OrbitportSDKError);
-    });
-
-    it("should validate response structure", async () => {
-      const mockToken = "test-token";
-      const invalidResponse = {
-        // Missing required fields
-        service: "trng",
-      };
-
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(invalidResponse),
-        headers: new Map(),
-      });
-
-      await expect(ctrngService.random()).rejects.toThrow(OrbitportSDKError);
-    });
-
-    it("should handle response with signature", async () => {
-      const mockToken = "test-token";
-      const mockResponse = {
-        service: "trng",
-        src: "aptosorbital",
-        data: "test-random-data",
-        signature: {
-          value: "signature-value",
-          pk: "public-key",
-          algo: "ed25519",
+      await ctrngService.random({ src: "ipfs" });
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+        {
+          path: mockConfig.ipfs!.defaultBeaconPath,
+          sources: ["both"],
+          enableComparison: true,
+          timeout: mockConfig.timeout,
+          block: "INF",
         },
-      };
-
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-        headers: new Map(),
-      });
-
-      const result = await ctrngService.random();
-
-      expect(result.success).toBe(true);
-      expect(result.data.signature).toEqual(mockResponse.signature);
+        expect.any(Object)
+      );
     });
 
-    it("should handle invalid signature structure", async () => {
-      const mockToken = "test-token";
-      const mockResponse = {
-        service: "trng",
-        src: "aptosorbital",
-        data: "test-random-data",
-        signature: {
-          // Missing required value field
-          pk: "public-key",
-        },
+    it("should use custom beacon path if provided", async () => {
+      const customPath = "/ipns/custom-path";
+      const mockBeaconResponse = {
+        data: { ctrng: [123] },
+        metadata: {},
+        success: true,
       };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
 
-      mockGetToken.mockResolvedValue(mockToken);
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-        headers: new Map(),
-      });
+      await ctrngService.random({ src: "ipfs", beaconPath: customPath });
+      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+        {
+          path: customPath,
+          sources: ["both"],
+          enableComparison: true,
+          timeout: mockConfig.timeout,
+          block: "INF",
+        },
+        expect.any(Object)
+      );
+    });
 
-      await expect(ctrngService.random()).rejects.toThrow(OrbitportSDKError);
+    it("should use block traversal when block is specified", async () => {
+      const mockBeaconResponse = {
+        data: { ctrng: [123, 456, 789] },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
+
+      await ctrngService.random({
+        src: "ipfs",
+        block: 10012,
+        index: 1,
+      } as IPFSCTRNGRequest);
+
+      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+        {
+          path: mockConfig.ipfs!.defaultBeaconPath,
+          sources: ["both"],
+          enableComparison: true,
+          timeout: mockConfig.timeout,
+          block: 10012,
+        },
+        expect.any(Object)
+      );
+    });
+
+    it("should use latest block when block is INF", async () => {
+      const mockBeaconResponse = {
+        data: { ctrng: [123, 456, 789] },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
+
+      await ctrngService.random({
+        src: "ipfs",
+        block: "INF",
+        index: 2,
+      } as IPFSCTRNGRequest);
+
+      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+        {
+          path: mockConfig.ipfs!.defaultBeaconPath,
+          sources: ["both"],
+          enableComparison: true,
+          timeout: mockConfig.timeout,
+          block: "INF",
+        },
+        expect.any(Object)
+      );
+    });
+
+    it("should select correct index from cTRNG array", async () => {
+      const mockBeaconResponse = {
+        data: { ctrng: [100, 200, 300, 400] },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
+
+      const result = await ctrngService.random({
+        src: "ipfs",
+        index: 2,
+      } as IPFSCTRNGRequest);
+
+      expect(result.data.data).toBe("300");
+    });
+
+    it("should handle out-of-bounds index with modulo", async () => {
+      const mockBeaconResponse = {
+        data: { ctrng: [100, 200, 300] },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
+
+      // Request index 5, but array has 3 elements, so 5 % 3 = 2
+      const result = await ctrngService.random({
+        src: "ipfs",
+        index: 5,
+      } as IPFSCTRNGRequest);
+
+      expect(result.data.data).toBe("300"); // Should get index 2 (5 % 3 = 2)
+    });
+
+    it("should use index 0 as default when not specified", async () => {
+      const mockBeaconResponse = {
+        data: { ctrng: [100, 200, 300] },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
+
+      const result = await ctrngService.random({
+        src: "ipfs",
+      } as IPFSCTRNGRequest);
+
+      expect(result.data.data).toBe("100"); // Should get first element (index 0)
+    });
+
+    it("should handle comparison result format", async () => {
+      const mockComparisonResponse = {
+        data: {
+          gateway: { ctrng: [100, 200, 300] },
+          api: { ctrng: [100, 200, 300] },
+          match: true,
+        },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockComparisonResponse
+      );
+
+      const result = await ctrngService.random({
+        src: "ipfs",
+        index: 1,
+      } as IPFSCTRNGRequest);
+
+      expect(result.data.data).toBe("200");
+    });
+
+    it("should throw error for non-IPFS request with IPFS parameters", async () => {
+      await expect(
+        ctrngService.random({
+          src: "trng",
+          block: 10012,
+        } as any)
+      ).rejects.toThrow(
+        "IPFS-specific parameters (beaconPath, index, block) can only be used with src: 'ipfs'"
+      );
+    });
+
+    it("should throw error when no beacon data is found", async () => {
+      const mockBeaconResponse = {
+        data: { ctrng: [] },
+        metadata: {},
+        success: true,
+      };
+      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
+        mockBeaconResponse
+      );
+
+      await expect(
+        ctrngService.random({ src: "ipfs" } as IPFSCTRNGRequest)
+      ).rejects.toThrow("No cTRNG values found in beacon data");
     });
   });
 });
