@@ -159,7 +159,7 @@ export class IPFSService {
         chunks.push(chunk);
       }
 
-      const text = Buffer.concat(chunks).toString();
+      const text = chunks.join("");
       return {
         source: `api:${this.config.apiUrl}`,
         text,
@@ -438,6 +438,145 @@ export class IPFSService {
         "Unexpected response type from API",
         ERROR_CODES.INVALID_RESPONSE
       );
+    }
+  }
+
+  /**
+   * Gets beacon data with block traversal
+   * @param request - Beacon request parameters with block traversal
+   * @param options - Request options
+   * @returns Promise resolving to beacon data at specified block
+   */
+  async getBeaconWithBlockTraversal(
+    request: IPFSBeaconRequest & { block?: number | "INF" },
+    options: RequestOptions = {}
+  ): Promise<ServiceResult<BeaconData | BeaconComparison>> {
+    const { block = "INF" } = request;
+
+    if (block === "INF") {
+      // No traversal needed, get latest block
+      return this.getBeacon(request, options);
+    }
+
+    if (typeof block !== "number" || block < 0) {
+      throw new OrbitportSDKError(
+        "Block number must be a non-negative integer",
+        ERROR_CODES.INVALID_REQUEST
+      );
+    }
+
+    if (this.debug) {
+      console.log(`[OrbitportSDK] Starting block traversal to block ${block}`);
+    }
+
+    // Get the latest block first to check current sequence
+    const latestResult = await this.getBeacon(request, options);
+    let currentBeacon: BeaconData;
+
+    if ("sequence" in latestResult.data) {
+      currentBeacon = latestResult.data;
+    } else if ("gateway" in latestResult.data) {
+      currentBeacon = latestResult.data.gateway || latestResult.data.api!;
+    } else {
+      throw new OrbitportSDKError(
+        "Invalid beacon data structure",
+        ERROR_CODES.INVALID_RESPONSE
+      );
+    }
+
+    const currentSequence = currentBeacon.sequence;
+
+    if (block > currentSequence) {
+      throw new OrbitportSDKError(
+        `Requested block ${block} is greater than current block ${currentSequence}`,
+        ERROR_CODES.INVALID_REQUEST
+      );
+    }
+
+    if (block === currentSequence) {
+      // Already at the requested block
+      return latestResult;
+    }
+
+    // Traverse back through the chain
+    let targetBeacon = currentBeacon;
+    let traversedBlocks = 0;
+    const maxTraversal = currentSequence - block;
+
+    while (traversedBlocks < maxTraversal && targetBeacon.previous) {
+      if (this.debug) {
+        console.log(
+          `[OrbitportSDK] Traversing from block ${targetBeacon.sequence} to previous block`
+        );
+      }
+
+      // Get the previous block
+      const previousPath = targetBeacon.previous;
+      const previousResult = await this.getBeacon(
+        { ...request, path: previousPath },
+        options
+      );
+
+      let previousBeacon: BeaconData;
+      if ("sequence" in previousResult.data) {
+        previousBeacon = previousResult.data;
+      } else if ("gateway" in previousResult.data) {
+        previousBeacon =
+          previousResult.data.gateway || previousResult.data.api!;
+      } else {
+        throw new OrbitportSDKError(
+          "Invalid previous beacon data structure",
+          ERROR_CODES.INVALID_RESPONSE
+        );
+      }
+
+      targetBeacon = previousBeacon;
+      traversedBlocks++;
+
+      if (targetBeacon.sequence === block) {
+        // Found the target block
+        break;
+      }
+
+      if (targetBeacon.sequence < block) {
+        throw new OrbitportSDKError(
+          `Block ${block} not found in chain. Last available block: ${targetBeacon.sequence}`,
+          ERROR_CODES.INVALID_REQUEST
+        );
+      }
+    }
+
+    if (targetBeacon.sequence !== block) {
+      throw new OrbitportSDKError(
+        `Failed to reach block ${block}. Current block: ${targetBeacon.sequence}`,
+        ERROR_CODES.INVALID_REQUEST
+      );
+    }
+
+    if (this.debug) {
+      console.log(
+        `[OrbitportSDK] Successfully traversed to block ${block} (${traversedBlocks} steps)`
+      );
+    }
+
+    // Return the target beacon data in the same format as the original request
+    if ("sequence" in latestResult.data) {
+      return {
+        data: targetBeacon,
+        metadata: latestResult.metadata,
+        success: true,
+      };
+    } else {
+      // Return as comparison format but with single beacon
+      return {
+        data: {
+          gateway: targetBeacon,
+          api: null,
+          match: true,
+        },
+        metadata: latestResult.metadata,
+        success: true,
+      };
     }
   }
 

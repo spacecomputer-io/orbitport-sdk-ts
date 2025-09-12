@@ -216,8 +216,17 @@ export class CTRNGService {
     request: CTRNGRequest,
     options: RequestOptions
   ): Promise<ServiceResult<CTRNGResponse>> {
+    // Type guard to ensure this is an IPFS request
+    if (request.src !== "ipfs") {
+      throw new OrbitportSDKError(
+        "Invalid request type for IPFS beacon",
+        ERROR_CODES.INVALID_REQUEST
+      );
+    }
+
+    const ipfsRequest = request as import("../types").IPFSCTRNGRequest;
     const beaconPath =
-      request.beaconPath || this.config.ipfs?.defaultBeaconPath;
+      ipfsRequest.beaconPath || this.config.ipfs?.defaultBeaconPath;
 
     if (!beaconPath) {
       throw new OrbitportSDKError(
@@ -227,21 +236,24 @@ export class CTRNGService {
     }
 
     if (this.debug) {
-      console.log("[OrbitportSDK] Reading from BOTH IPFS sources:", {
+      console.log("[OrbitportSDK] Reading from IPFS sources:", {
         gateway: this.config.ipfs?.gateway,
         api: this.config.ipfs?.apiUrl,
         path: beaconPath,
+        block: ipfsRequest.block || "INF",
+        index: ipfsRequest.index || 0,
       });
     }
 
     try {
-      // Always read from both sources and compare (like beacon.js)
-      const ipfsResult = await this.ipfsService.getBeacon(
+      // Use block traversal if block is specified, otherwise get latest
+      const ipfsResult = await this.ipfsService.getBeaconWithBlockTraversal(
         {
           path: beaconPath,
           sources: ["both"],
           enableComparison: true,
           timeout: options.timeout,
+          block: ipfsRequest.block,
         },
         options
       );
@@ -270,12 +282,23 @@ export class CTRNGService {
           }
         }
 
-        // Convert to CTRNGResponse format and return only first cTRNG value
-        const ctrngValue = beaconData.ctrng[0];
-        if (ctrngValue === undefined) {
+        // Convert to CTRNGResponse format and return selected cTRNG value
+        const ctrngArray = beaconData.ctrng;
+        if (!ctrngArray || ctrngArray.length === 0) {
           throw new OrbitportSDKError(
             "No cTRNG values found in beacon data",
             ERROR_CODES.INVALID_RESPONSE
+          );
+        }
+
+        // Use index with modulo validation to prevent out-of-bounds access
+        const requestedIndex = ipfsRequest.index ?? 0;
+        const actualIndex = requestedIndex % ctrngArray.length;
+        const ctrngValue = ctrngArray[actualIndex];
+
+        if (this.debug && requestedIndex !== actualIndex) {
+          console.log(
+            `[OrbitportSDK] index ${requestedIndex} adjusted to ${actualIndex} (array length: ${ctrngArray.length})`
           );
         }
 
@@ -294,11 +317,22 @@ export class CTRNGService {
         };
       } else {
         // Single beacon data (fallback)
-        const ctrngValue = ipfsResult.data.ctrng[0];
-        if (ctrngValue === undefined) {
+        const ctrngArray = ipfsResult.data.ctrng;
+        if (!ctrngArray || ctrngArray.length === 0) {
           throw new OrbitportSDKError(
             "No cTRNG values found in beacon data",
             ERROR_CODES.INVALID_RESPONSE
+          );
+        }
+
+        // Use index with modulo validation to prevent out-of-bounds access
+        const requestedIndex = ipfsRequest.index ?? 0;
+        const actualIndex = requestedIndex % ctrngArray.length;
+        const ctrngValue = ctrngArray[actualIndex];
+
+        if (this.debug && requestedIndex !== actualIndex) {
+          console.log(
+            `[OrbitportSDK] index ${requestedIndex} adjusted to ${actualIndex} (array length: ${ctrngArray.length})`
           );
         }
 

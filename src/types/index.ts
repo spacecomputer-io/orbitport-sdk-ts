@@ -50,10 +50,21 @@ export interface CTRNGResponse {
   provider?: string;
 }
 
-export interface CTRNGRequest {
-  src?: "trng" | "rng" | "ipfs";
-  beaconPath?: string;
+// Base request interface for API sources
+export interface BaseCTRNGRequest {
+  src?: "trng" | "rng";
 }
+
+// IPFS-specific request interface with block traversal and index selection
+export interface IPFSCTRNGRequest {
+  src: "ipfs";
+  beaconPath?: string;
+  block?: number | "INF"; // Block number or "INF" for latest
+  index?: number; // Renamed from ctrngIndex
+}
+
+// Union type for all CTRNG requests
+export type CTRNGRequest = BaseCTRNGRequest | IPFSCTRNGRequest;
 
 // IPFS Beacon types
 export interface BeaconData {
