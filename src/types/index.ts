@@ -59,7 +59,7 @@ export interface IPFSCTRNGRequest {
   src: "ipfs";
   beaconPath?: string;
   block?: number | "INF"; // Block number or "INF" for latest
-  index?: number; // Renamed from ctrngIndex
+  index?: number;
 }
 
 // Union type for all CTRNG requests

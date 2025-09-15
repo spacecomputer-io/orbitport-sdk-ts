@@ -4,23 +4,16 @@
  * @packageDocumentation
  */
 
-// Export all types
 export * from "./types";
-
-// Export storage implementations
 export * from "./storage";
-
-// Export utility functions
 export * from "./utils/errors";
 export * from "./utils/retry";
 export * from "./utils/validation";
 
-// Export services
 export { AuthService } from "./services/auth";
 export { CTRNGService } from "./services/ctrng";
 export { IPFSService } from "./services/ipfs";
 
-// Main SDK class
 import type {
   OrbitportConfig,
   SDKInitOptions,
@@ -307,5 +300,4 @@ export function createOrbitportSDK(config: OrbitportConfig): OrbitportSDK {
   return new OrbitportSDK({ config });
 }
 
-// Default export
 export default OrbitportSDK;
