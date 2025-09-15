@@ -1,5 +1,5 @@
 {
-  "name": "@spacecomputer/orbitport-sdk",
+  "name": "@spacecomputer-io/orbitport-sdk-ts",
   "version": "0.0.1",
   "description": "Official TypeScript SDK for SpaceComputer Orbitport",
   "main": "dist/index.js",
@@ -40,7 +40,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/easonchai/orbitport-sdk.git"
+    "url": "git+https://github.com/spacecomputer-io/orbitport-sdk-ts.git"
   },
   "keywords": [
     "spacecomputer",
@@ -60,9 +60,9 @@
   "author": "Eason Chai",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/easonchai/orbitport-sdk/issues"
+    "url": "https://github.com/spacecomputer-io/orbitport-sdk-ts/issues"
   },
-  "homepage": "https://github.com/easonchai/orbitport-sdk#readme",
+  "homepage": "https://github.com/spacecomputer-io/orbitport-sdk-ts#readme",
   "engines": {
     "node": ">=16.0.0"
   },
