@@ -23,7 +23,7 @@ import type {
 } from "./types";
 import { AuthService } from "./services/auth";
 import { CTRNGService } from "./services/ctrng";
-import { IPFSService } from "./services/ipfs";
+import { BeaconService } from "./services/beacon";
 import { createDefaultStorage } from "./storage";
 import { sanitizeConfig } from "./utils/validation";
 
@@ -56,7 +56,7 @@ export class OrbitportSDK {
   private config: OrbitportConfig;
   private authService: AuthService;
   private ctrngService: CTRNGService;
-  private ipfsService: IPFSService;
+  private beaconService: BeaconService;
   private debug: boolean;
 
   /**
@@ -80,12 +80,12 @@ export class OrbitportSDK {
       this.debug
     );
 
-    this.ipfsService = new IPFSService(this.config.ipfs || {}, this.debug);
+    this.beaconService = new BeaconService(this.config.ipfs || {}, this.debug);
 
     this.ctrngService = new CTRNGService(
       this.config,
       () => this.authService.getValidToken(),
-      this.ipfsService,
+      this.beaconService,
       this.debug
     );
 
@@ -221,7 +221,7 @@ export class OrbitportSDK {
     // Update IPFS configuration if provided
     if (newConfig.ipfs) {
       this.ctrngService.updateIPFSConfig(newConfig.ipfs);
-      this.ipfsService.updateConfig(newConfig.ipfs);
+      this.beaconService.updateConfig(newConfig.ipfs);
     }
 
     if (this.debug) {
