@@ -19,7 +19,7 @@ import {
   createNetworkError,
 } from "../utils/errors";
 import { sanitizeCTRNGRequest } from "../utils/validation";
-import { IPFSService } from "./ipfs";
+import { BeaconService } from "./beacon";
 
 /**
  * cTRNG service class
@@ -28,18 +28,18 @@ export class CTRNGService {
   private config: OrbitportConfig;
   private getToken: () => Promise<string | null>;
   private debug: boolean;
-  private ipfsService: IPFSService;
+  private beaconService: BeaconService;
 
   constructor(
     config: OrbitportConfig,
     getToken: () => Promise<string | null>,
-    ipfsService: IPFSService,
+    beaconService: BeaconService,
     debug: boolean = false
   ) {
     this.config = config;
     this.getToken = getToken;
     this.debug = debug;
-    this.ipfsService = ipfsService;
+    this.beaconService = beaconService;
   }
 
   /**
@@ -282,7 +282,7 @@ export class CTRNGService {
 
     try {
       // Use block traversal if block is specified, otherwise get latest
-      const ipfsResult = await this.ipfsService.getBeaconWithBlockTraversal(
+      const ipfsResult = await this.beaconService.getBeaconWithBlockTraversal(
         {
           path: beaconPath,
           sources: ["both"],
@@ -485,6 +485,6 @@ export class CTRNGService {
    * @param ipfsConfig - New IPFS configuration
    */
   updateIPFSConfig(ipfsConfig: any): void {
-    this.ipfsService.updateConfig(ipfsConfig);
+    this.beaconService.updateConfig(ipfsConfig);
   }
 }

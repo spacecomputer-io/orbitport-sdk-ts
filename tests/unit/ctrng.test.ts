@@ -3,11 +3,11 @@
  */
 
 import { CTRNGService } from "../../src/services/ctrng";
-import { IPFSService } from "../../src/services/ipfs";
+import { BeaconService } from "../../src/services/beacon";
 import { OrbitportConfig, IPFSCTRNGRequest } from "../../src/types";
 
-// Mock IPFSService
-jest.mock("../../src/services/ipfs");
+// Mock BeaconService
+jest.mock("../../src/services/beacon");
 
 // No need to mock ipfs-http-client since we're using direct HTTP calls
 
@@ -35,15 +35,15 @@ const mockIpfsOnlyConfig: OrbitportConfig = {
 
 describe("CTRNGService", () => {
   let ctrngService: CTRNGService;
-  let ipfsService: IPFSService;
+  let beaconService: BeaconService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    ipfsService = new IPFSService(mockConfig.ipfs || {});
+    beaconService = new BeaconService(mockConfig.ipfs || {});
     ctrngService = new CTRNGService(
       mockConfig,
       mockGetToken,
-      ipfsService,
+      beaconService,
       true
     );
   });
@@ -69,7 +69,7 @@ describe("CTRNGService", () => {
         "https://test-api.com/api/v1/services/trng?src=trng",
         expect.any(Object)
       );
-      expect(ipfsService.getBeacon).not.toHaveBeenCalled();
+      expect(beaconService.getBeacon).not.toHaveBeenCalled();
     });
 
     it("should fall back to IPFS if API fails", async () => {
@@ -82,13 +82,13 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       await ctrngService.random();
       expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+      expect(beaconService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
         {
           path: mockConfig.ipfs!.defaultBeaconPath,
           sources: ["both"],
@@ -104,7 +104,7 @@ describe("CTRNGService", () => {
       ctrngService = new CTRNGService(
         mockIpfsOnlyConfig,
         mockGetToken,
-        ipfsService,
+        beaconService,
         true
       );
       const mockBeaconResponse = {
@@ -112,13 +112,15 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       await ctrngService.random();
       expect(global.fetch).not.toHaveBeenCalled();
-      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledTimes(1);
+      expect(beaconService.getBeaconWithBlockTraversal).toHaveBeenCalledTimes(
+        1
+      );
     });
 
     it("should call IPFS directly if src is 'ipfs'", async () => {
@@ -127,13 +129,13 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       await ctrngService.random({ src: "ipfs" });
       expect(global.fetch).not.toHaveBeenCalled();
-      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+      expect(beaconService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
         {
           path: mockConfig.ipfs!.defaultBeaconPath,
           sources: ["both"],
@@ -152,12 +154,12 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       await ctrngService.random({ src: "ipfs", beaconPath: customPath });
-      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+      expect(beaconService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
         {
           path: customPath,
           sources: ["both"],
@@ -175,9 +177,9 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       await ctrngService.random({
         src: "ipfs",
@@ -185,7 +187,7 @@ describe("CTRNGService", () => {
         index: 1,
       } as IPFSCTRNGRequest);
 
-      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+      expect(beaconService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
         {
           path: mockConfig.ipfs!.defaultBeaconPath,
           sources: ["both"],
@@ -203,9 +205,9 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       await ctrngService.random({
         src: "ipfs",
@@ -213,7 +215,7 @@ describe("CTRNGService", () => {
         index: 2,
       } as IPFSCTRNGRequest);
 
-      expect(ipfsService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
+      expect(beaconService.getBeaconWithBlockTraversal).toHaveBeenCalledWith(
         {
           path: mockConfig.ipfs!.defaultBeaconPath,
           sources: ["both"],
@@ -231,9 +233,9 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       const result = await ctrngService.random({
         src: "ipfs",
@@ -249,9 +251,9 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       // Request index 5, but array has 3 elements, so 5 % 3 = 2
       const result = await ctrngService.random({
@@ -268,9 +270,9 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       const result = await ctrngService.random({
         src: "ipfs",
@@ -289,9 +291,9 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockComparisonResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockComparisonResponse);
 
       const result = await ctrngService.random({
         src: "ipfs",
@@ -318,9 +320,9 @@ describe("CTRNGService", () => {
         metadata: {},
         success: true,
       };
-      (ipfsService.getBeaconWithBlockTraversal as jest.Mock).mockResolvedValue(
-        mockBeaconResponse
-      );
+      (
+        beaconService.getBeaconWithBlockTraversal as jest.Mock
+      ).mockResolvedValue(mockBeaconResponse);
 
       await expect(
         ctrngService.random({ src: "ipfs" } as IPFSCTRNGRequest)

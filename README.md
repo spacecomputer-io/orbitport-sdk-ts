@@ -5,7 +5,7 @@ Official TypeScript SDK for SpaceComputer Orbitport - providing access to cosmic
 ## Installation
 
 ```bash
-npm install @spacecomputer/orbitport-sdk
+npm i @spacecomputer-io/orbitport-sdk-ts
 ```
 
 ## Quick Start
@@ -178,7 +178,7 @@ The SDK's IPFS integration is designed to mirror the functionality of the `beaco
 ### Default IPFS Configuration
 
 - **Gateway**: `https://ipfs.io`
-- **API**: `http://65.109.2.230:5001`
+- **API**: `https://ipfs.io`
 - **Default Beacon**: `/ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe`
 
 You can override these defaults in the SDK configuration.
@@ -190,7 +190,7 @@ When `debug: true` is enabled, you will see detailed logs, including the IPFS so
 ```
 [OrbitportSDK] Reading from BOTH IPFS sources:
   - Gateway: https://ipfs.io
-  - API: http://65.109.2.230:5001
+  - API: https://ipfs.io
   - Path: /ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe
 
 [OrbitportSDK] ✓ Gateway and API agree on sequence/previous
@@ -245,8 +245,8 @@ const latestValue = await sdk.ctrng.random({
 
 ### Prerequisites
 
-- Node.js 16+
-- TypeScript 4.5+
+- Node.js 22+
+- TypeScript 5.0+
 
 ### Setup
 
