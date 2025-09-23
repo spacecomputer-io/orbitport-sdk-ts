@@ -5,7 +5,7 @@ Official TypeScript SDK for SpaceComputer Orbitport - providing access to cosmic
 ## Installation
 
 ```bash
-npm install @spacecomputer/orbitport-sdk
+npm i @spacecomputer-io/orbitport-sdk-ts
 ```
 
 ## Quick Start
