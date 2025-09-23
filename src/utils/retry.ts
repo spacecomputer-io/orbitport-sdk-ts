@@ -2,8 +2,8 @@
  * Retry logic utilities for the Orbitport SDK
  */
 
-import type { OrbitportError } from "../types";
-import { isRetryableError } from "./errors";
+import type { OrbitportError } from '../types';
+import { isRetryableError } from './errors';
 
 /**
  * Retry configuration options
@@ -58,7 +58,7 @@ function sleep(ms: number): Promise<void> {
 export async function withRetry<T>(
   fn: () => Promise<T>,
   options: Partial<RetryOptions> = {},
-  onRetry?: (error: OrbitportError, attempt: number) => void
+  onRetry?: (error: OrbitportError, attempt: number) => void,
 ): Promise<T> {
   const config = { ...DEFAULT_RETRY_OPTIONS, ...options };
   let lastError: OrbitportError;
@@ -101,7 +101,7 @@ export async function withCustomRetry<T>(
   shouldRetry: (error: OrbitportError, attempt: number) => boolean,
   getDelay: (attempt: number) => number,
   maxAttempts: number = 3,
-  onRetry?: (error: OrbitportError, attempt: number) => void
+  onRetry?: (error: OrbitportError, attempt: number) => void,
 ): Promise<T> {
   let lastError: OrbitportError;
 
@@ -136,7 +136,7 @@ export async function withCustomRetry<T>(
 export function createRetryWrapper(options: Partial<RetryOptions> = {}) {
   return <T>(
     fn: () => Promise<T>,
-    onRetry?: (error: OrbitportError, attempt: number) => void
+    onRetry?: (error: OrbitportError, attempt: number) => void,
   ) => withRetry(fn, options, onRetry);
 }
 

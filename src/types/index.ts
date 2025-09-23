@@ -2,7 +2,7 @@
  * Core types and interfaces for the Orbitport SDK
  */
 
-import type { ErrorCode } from "../utils/errors";
+import type { ErrorCode } from '../utils/errors';
 
 // Configuration interfaces
 export interface OrbitportConfig {
@@ -51,14 +51,14 @@ export interface CTRNGResponse {
 }
 
 export interface APICTRNGRequest {
-  src: "trng" | "rng";
+  src: 'trng' | 'rng';
 }
 
 // IPFS-specific request interface with block traversal and index selection
 export interface IPFSCTRNGRequest {
-  src: "ipfs";
+  src: 'ipfs';
   beaconPath?: string;
-  block?: number | "INF"; // Block number or "INF" for latest
+  block?: number | 'INF'; // Block number or "INF" for latest
   index?: number;
 }
 
@@ -106,14 +106,14 @@ export interface IPFSConfig {
 
 export interface IPFSNode {
   url: string;
-  type: "gateway" | "api";
+  type: 'gateway' | 'api';
   priority?: number;
   timeout?: number;
 }
 
 export interface IPFSBeaconRequest {
   path: string; // /ipns/<beacon-cid> or /ipfs/<block-cid>
-  sources?: ("gateway" | "api" | "both")[];
+  sources?: ('gateway' | 'api' | 'both')[];
   timeout?: number;
   enableComparison?: boolean;
 }
@@ -134,7 +134,7 @@ export interface APIError {
 
 // SDK event types
 export interface SDKEvent {
-  type: "token_refresh" | "provider_switch" | "error" | "retry";
+  type: 'token_refresh' | 'provider_switch' | 'error' | 'retry';
   timestamp: number;
   data?: unknown;
 }

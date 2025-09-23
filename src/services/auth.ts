@@ -10,15 +10,15 @@ import type {
   SDKEvent,
   SDKEventHandler,
   APIError,
-} from "../types";
+} from '../types';
 import {
   OrbitportSDKError,
   ERROR_CODES,
   createErrorFromAPIResponse,
   createNetworkError,
-} from "../utils/errors";
-import { withRetry, RETRY_STRATEGIES } from "../utils/retry";
-import { isTokenExpired } from "../utils/validation";
+} from '../utils/errors';
+import { withRetry, RETRY_STRATEGIES } from '../utils/retry';
+import { isTokenExpired } from '../utils/validation';
 
 /**
  * Authentication service class
@@ -34,7 +34,7 @@ export class AuthService {
     config: OrbitportConfig,
     storage: TokenStorage,
     eventHandler?: SDKEventHandler,
-    debug: boolean = false
+    debug: boolean = false,
   ) {
     this.config = config;
     this.storage = storage;
@@ -71,14 +71,14 @@ export class AuthService {
 
       if (existingToken && !isTokenExpired(existingToken)) {
         if (this.debug) {
-          console.log("[OrbitportSDK] Using existing valid token");
+          console.log('[OrbitportSDK] Using existing valid token');
         }
         return existingToken;
       }
 
       if (this.debug) {
         console.log(
-          "[OrbitportSDK] Token expired or not found, requesting new token"
+          '[OrbitportSDK] Token expired or not found, requesting new token',
         );
       }
 
@@ -87,8 +87,8 @@ export class AuthService {
 
       if (!tokenData) {
         throw new OrbitportSDKError(
-          "Failed to obtain access token",
-          ERROR_CODES.AUTH_FAILED
+          'Failed to obtain access token',
+          ERROR_CODES.AUTH_FAILED,
         );
       }
 
@@ -97,7 +97,7 @@ export class AuthService {
 
       // Emit token refresh event
       this.emitEvent({
-        type: "token_refresh",
+        type: 'token_refresh',
         timestamp: Date.now(),
         data: { expires_at: tokenData.expires_at },
       });
@@ -105,7 +105,7 @@ export class AuthService {
       return tokenData.access_token;
     } catch (error) {
       if (this.debug) {
-        console.error("[OrbitportSDK] Token retrieval failed:", error);
+        console.error('[OrbitportSDK] Token retrieval failed:', error);
       }
 
       // Clear invalid token from storage
@@ -124,28 +124,28 @@ export class AuthService {
     const requestBody = {
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
-      audience: audience,
-      grant_type: "client_credentials",
+      audience,
+      grant_type: 'client_credentials',
     };
 
     if (this.debug) {
-      console.log("[OrbitportSDK] Requesting token from:", authUrl);
+      console.log('[OrbitportSDK] Requesting token from:', authUrl);
     }
 
     try {
       const response = await withRetry(
-        async () => {
+        async() => {
           const controller = new AbortController();
           const timeoutId = setTimeout(
             () => controller.abort(),
-            this.config.timeout
+            this.config.timeout,
           );
 
           try {
             const response = await fetch(authUrl, {
-              method: "POST",
+              method: 'POST',
               headers: {
-                "Content-Type": "application/json",
+                'Content-Type': 'application/json',
               },
               body: JSON.stringify(requestBody),
               signal: controller.signal,
@@ -163,10 +163,10 @@ export class AuthService {
           if (this.debug) {
             console.warn(
               `[OrbitportSDK] Token request attempt ${attempt} failed:`,
-              error.message
+              error.message,
             );
           }
-        }
+        },
       );
 
       if (!response.ok) {
@@ -175,8 +175,8 @@ export class AuthService {
           apiError = await response.json();
         } catch {
           apiError = {
-            error: "Unknown error",
-            error_description: "Failed to parse error response",
+            error: 'Unknown error',
+            error_description: 'Failed to parse error response',
           };
         }
 
@@ -187,8 +187,8 @@ export class AuthService {
 
       if (!tokenResponse.access_token) {
         throw new OrbitportSDKError(
-          "Invalid token response: missing access_token",
-          ERROR_CODES.INVALID_RESPONSE
+          'Invalid token response: missing access_token',
+          ERROR_CODES.INVALID_RESPONSE,
         );
       }
 
@@ -198,7 +198,7 @@ export class AuthService {
       return {
         access_token: tokenResponse.access_token,
         expires_at: expiresAt,
-        token_type: tokenResponse.token_type || "Bearer",
+        token_type: tokenResponse.token_type || 'Bearer',
       };
     } catch (error) {
       if (error instanceof OrbitportSDKError) {
@@ -207,20 +207,20 @@ export class AuthService {
 
       // Handle network errors
       if (error instanceof Error) {
-        if (error.name === "AbortError") {
+        if (error.name === 'AbortError') {
           throw new OrbitportSDKError(
-            "Token request timeout",
-            ERROR_CODES.TIMEOUT
+            'Token request timeout',
+            ERROR_CODES.TIMEOUT,
           );
         }
         throw createNetworkError(error);
       }
 
       throw new OrbitportSDKError(
-        "Unknown error during token request",
+        'Unknown error during token request',
         ERROR_CODES.UNKNOWN_ERROR,
         undefined,
-        error
+        error,
       );
     }
   }
@@ -232,9 +232,9 @@ export class AuthService {
     await this.storage.clear();
 
     this.emitEvent({
-      type: "token_refresh",
+      type: 'token_refresh',
       timestamp: Date.now(),
-      data: { action: "cleared" },
+      data: { action: 'cleared' },
     });
   }
 
@@ -265,7 +265,7 @@ export class AuthService {
       }
 
       // Parse token to get expiration
-      const parts = token.split(".");
+      const parts = token.split('.');
       if (parts.length >= 2) {
         const payload = JSON.parse(atob(parts[1]));
         return { valid: true, expiresAt: payload.exp };
@@ -286,7 +286,7 @@ export class AuthService {
         this.eventHandler(event);
       } catch (error) {
         if (this.debug) {
-          console.warn("[OrbitportSDK] Event handler error:", error);
+          console.warn('[OrbitportSDK] Event handler error:', error);
         }
       }
     }
