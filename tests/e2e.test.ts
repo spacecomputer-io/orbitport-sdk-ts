@@ -266,7 +266,7 @@ describe("Orbitport SDK E2E Tests", () => {
       });
 
       const customBeaconPath =
-        "/ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe";
+        "/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f";
       const result = await ipfsSdk.ctrng.random({
         src: "ipfs",
         beaconPath: customBeaconPath,
