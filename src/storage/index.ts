@@ -2,7 +2,7 @@
  * Token storage implementations for different environments
  */
 
-import type { TokenStorage } from "../types";
+import type { TokenStorage } from '../types';
 
 /**
  * Browser localStorage implementation
@@ -10,12 +10,12 @@ import type { TokenStorage } from "../types";
 export class BrowserTokenStorage implements TokenStorage {
   private readonly key: string;
 
-  constructor(key: string = "orbitport_token") {
+  constructor(key: string = 'orbitport_token') {
     this.key = key;
   }
 
   async get(): Promise<string | null> {
-    if (typeof window === "undefined" || !window.localStorage) {
+    if (typeof window === 'undefined' || !window.localStorage) {
       return null;
     }
 
@@ -33,14 +33,14 @@ export class BrowserTokenStorage implements TokenStorage {
 
       return tokenData.access_token;
     } catch (error) {
-      console.warn("Failed to retrieve token from localStorage:", error);
+      console.warn('Failed to retrieve token from localStorage:', error);
       return null;
     }
   }
 
   async set(token: string, expiresAt: number): Promise<void> {
-    if (typeof window === "undefined" || !window.localStorage) {
-      throw new Error("localStorage is not available");
+    if (typeof window === 'undefined' || !window.localStorage) {
+      throw new Error('localStorage is not available');
     }
 
     try {
@@ -52,20 +52,20 @@ export class BrowserTokenStorage implements TokenStorage {
 
       window.localStorage.setItem(this.key, JSON.stringify(tokenData));
     } catch (error) {
-      console.warn("Failed to store token in localStorage:", error);
+      console.warn('Failed to store token in localStorage:', error);
       throw error;
     }
   }
 
   async clear(): Promise<void> {
-    if (typeof window === "undefined" || !window.localStorage) {
+    if (typeof window === 'undefined' || !window.localStorage) {
       return;
     }
 
     try {
       window.localStorage.removeItem(this.key);
     } catch (error) {
-      console.warn("Failed to clear token from localStorage:", error);
+      console.warn('Failed to clear token from localStorage:', error);
     }
   }
 }
@@ -103,13 +103,13 @@ export class FileTokenStorage implements TokenStorage {
   private readonly filePath: string;
   private readonly fs: any;
 
-  constructor(filePath: string = ".orbitport_token") {
+  constructor(filePath: string = '.orbitport_token') {
     this.filePath = filePath;
     // Dynamic import to avoid bundling fs in browser builds
     try {
-      this.fs = require("fs");
-    } catch (error) {
-      throw new Error("File system access not available in this environment");
+      this.fs = require('fs');
+    } catch (_error) {
+      throw new Error('File system access not available in this environment');
     }
   }
 
@@ -119,7 +119,7 @@ export class FileTokenStorage implements TokenStorage {
         return null;
       }
 
-      const data = this.fs.readFileSync(this.filePath, "utf8");
+      const data = this.fs.readFileSync(this.filePath, 'utf8');
       const tokenData = JSON.parse(data);
 
       // Check if token is expired
@@ -130,7 +130,7 @@ export class FileTokenStorage implements TokenStorage {
 
       return tokenData.access_token;
     } catch (error) {
-      console.warn("Failed to retrieve token from file:", error);
+      console.warn('Failed to retrieve token from file:', error);
       return null;
     }
   }
@@ -145,7 +145,7 @@ export class FileTokenStorage implements TokenStorage {
 
       this.fs.writeFileSync(this.filePath, JSON.stringify(tokenData, null, 2));
     } catch (error) {
-      console.warn("Failed to store token in file:", error);
+      console.warn('Failed to store token in file:', error);
       throw error;
     }
   }
@@ -156,7 +156,7 @@ export class FileTokenStorage implements TokenStorage {
         this.fs.unlinkSync(this.filePath);
       }
     } catch (error) {
-      console.warn("Failed to clear token file:", error);
+      console.warn('Failed to clear token file:', error);
     }
   }
 }
@@ -172,7 +172,7 @@ export class CustomTokenStorage implements TokenStorage {
   constructor(
     getter: () => Promise<string | null>,
     setter: (token: string, expiresAt: number) => Promise<void>,
-    clearer: () => Promise<void>
+    clearer: () => Promise<void>,
   ) {
     this.getter = getter;
     this.setter = setter;
@@ -197,13 +197,13 @@ export class CustomTokenStorage implements TokenStorage {
  */
 export function createDefaultStorage(): TokenStorage {
   // Check if we're in a browser environment
-  if (typeof window !== "undefined" && window.localStorage) {
+  if (typeof window !== 'undefined' && window.localStorage) {
     return new BrowserTokenStorage();
   }
 
   // Check if we're in Node.js environment
   if (
-    typeof process !== "undefined" &&
+    typeof process !== 'undefined' &&
     process.versions &&
     process.versions.node
   ) {
@@ -218,26 +218,26 @@ export function createDefaultStorage(): TokenStorage {
  * Creates a storage instance with specific configuration
  */
 export function createStorage(options: {
-  type: "browser" | "memory" | "file" | "custom";
+  type: 'browser' | 'memory' | 'file' | 'custom';
   key?: string;
   filePath?: string;
   customStorage?: TokenStorage;
 }): TokenStorage {
   switch (options.type) {
-    case "browser":
-      return new BrowserTokenStorage(options.key);
-    case "memory":
-      return new MemoryTokenStorage();
-    case "file":
-      return new FileTokenStorage(options.filePath);
-    case "custom":
-      if (!options.customStorage) {
-        throw new Error(
-          "Custom storage instance is required for 'custom' type"
-        );
-      }
-      return options.customStorage;
-    default:
-      throw new Error(`Unsupported storage type: ${options.type}`);
+  case 'browser':
+    return new BrowserTokenStorage(options.key);
+  case 'memory':
+    return new MemoryTokenStorage();
+  case 'file':
+    return new FileTokenStorage(options.filePath);
+  case 'custom':
+    if (!options.customStorage) {
+      throw new Error(
+        "Custom storage instance is required for 'custom' type",
+      );
+    }
+    return options.customStorage;
+  default:
+    throw new Error(`Unsupported storage type: ${options.type}`);
   }
 }

@@ -12,7 +12,7 @@ export * from "./utils/validation";
 
 export { AuthService } from "./services/auth";
 export { CTRNGService } from "./services/ctrng";
-export { IPFSService } from "./services/ipfs";
+export { BeaconService } from "./services/ipfs";
 
 import type {
   OrbitportConfig,

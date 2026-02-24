@@ -50,7 +50,8 @@ The SDK can be initialized with or without API credentials.
 interface OrbitportConfig {
   clientId?: string; // Optional: Your client ID
   clientSecret?: string; // Optional: Your client secret
-  authUrl?: string; // Optional: Auth server URL
+  authDomain?: string; // Optional: Auth domain (default: "auth.spacecomputer.io")
+  audience?: string; // Optional: Auth audience URL (default: "https://op.spacecomputer.io/api")
   apiUrl?: string; // Optional: API server URL
   timeout?: number; // Optional: Request timeout in ms (default: 30000)
   retryAttempts?: number; // Optional: Retry attempts (default: 3)
@@ -179,7 +180,7 @@ The SDK's IPFS integration is designed to mirror the functionality of the `beaco
 
 - **Gateway**: `https://ipfs.io`
 - **API**: `https://ipfs.io`
-- **Default Beacon**: `/ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe`
+- **Default Beacon**: `/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f`
 
 You can override these defaults in the SDK configuration.
 
@@ -191,7 +192,7 @@ When `debug: true` is enabled, you will see detailed logs, including the IPFS so
 [OrbitportSDK] Reading from BOTH IPFS sources:
   - Gateway: https://ipfs.io
   - API: https://ipfs.io
-  - Path: /ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe
+  - Path: /ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f
 
 [OrbitportSDK] ✓ Gateway and API agree on sequence/previous
 ```

@@ -11,15 +11,15 @@ import type {
   OrbitportConfig,
   IPFSCTRNGRequest,
   APICTRNGRequest,
-} from "../types";
+} from '../types';
 import {
   OrbitportSDKError,
   ERROR_CODES,
   createErrorFromAPIResponse,
   createNetworkError,
-} from "../utils/errors";
-import { sanitizeCTRNGRequest } from "../utils/validation";
-import { BeaconService } from "./beacon";
+} from '../utils/errors';
+import { sanitizeCTRNGRequest } from '../utils/validation';
+import { BeaconService } from './beacon';
 
 /**
  * cTRNG service class
@@ -34,7 +34,7 @@ export class CTRNGService {
     config: OrbitportConfig,
     getToken: () => Promise<string | null>,
     beaconService: BeaconService,
-    debug: boolean = false
+    debug: boolean = false,
   ) {
     this.config = config;
     this.getToken = getToken;
@@ -50,21 +50,21 @@ export class CTRNGService {
    */
   async random(
     request: Partial<CTRNGRequest> = {},
-    options: RequestOptions = {}
+    options: RequestOptions = {},
   ): Promise<ServiceResult<CTRNGResponse>> {
     let sanitizedRequest = sanitizeCTRNGRequest(request);
 
     // If no API credentials are provided, force IPFS mode for clarity
     if (!this.config.clientId || !this.config.clientSecret) {
-      if (sanitizedRequest.src !== "ipfs") {
+      if (sanitizedRequest.src !== 'ipfs') {
         sanitizedRequest = {
-          src: "ipfs",
-          block: "INF",
+          src: 'ipfs',
+          block: 'INF',
           index: 0,
         };
         if (this.debug) {
           console.log(
-            "[OrbitportSDK] No API credentials provided, switching to IPFS mode"
+            '[OrbitportSDK] No API credentials provided, switching to IPFS mode',
           );
         }
       }
@@ -78,17 +78,17 @@ export class CTRNGService {
 
     if (this.debug) {
       console.log(
-        "[OrbitportSDK] Generating random data with request:",
-        sanitizedRequest
+        '[OrbitportSDK] Generating random data with request:',
+        sanitizedRequest,
       );
     }
 
     try {
-      if (sanitizedRequest.src === "ipfs") {
+      if (sanitizedRequest.src === 'ipfs') {
         return await this._getFromIPFSBeacon(sanitizedRequest, requestOptions);
       } else if (
-        sanitizedRequest.src === "trng" ||
-        sanitizedRequest.src === "rng"
+        sanitizedRequest.src === 'trng' ||
+        sanitizedRequest.src === 'rng'
       ) {
         // TypeScript knows this is APICTRNGRequest
         if (this.config.clientId && this.config.clientSecret) {
@@ -97,14 +97,14 @@ export class CTRNGService {
           } catch (apiError) {
             if (this.debug) {
               console.log(
-                "[OrbitportSDK] API failed, trying IPFS fallback:",
-                apiError instanceof Error ? apiError.message : String(apiError)
+                '[OrbitportSDK] API failed, trying IPFS fallback:',
+                apiError instanceof Error ? apiError.message : String(apiError),
               );
             }
             // Create IPFS request for fallback
             const ipfsRequest: IPFSCTRNGRequest = {
-              src: "ipfs",
-              block: "INF",
+              src: 'ipfs',
+              block: 'INF',
               index: 0,
             };
             return await this._getFromIPFSBeacon(ipfsRequest, requestOptions);
@@ -112,8 +112,8 @@ export class CTRNGService {
         } else {
           // No API credentials, switch to IPFS
           const ipfsRequest: IPFSCTRNGRequest = {
-            src: "ipfs",
-            block: "INF",
+            src: 'ipfs',
+            block: 'INF',
             index: 0,
           };
           return await this._getFromIPFSBeacon(ipfsRequest, requestOptions);
@@ -121,13 +121,13 @@ export class CTRNGService {
       } else {
         // Fallback case - should not happen with proper types
         throw new OrbitportSDKError(
-          "Invalid request type",
-          ERROR_CODES.INVALID_REQUEST
+          'Invalid request type',
+          ERROR_CODES.INVALID_REQUEST,
         );
       }
     } catch (error) {
       if (this.debug) {
-        console.error("[OrbitportSDK] cTRNG generation failed:", error);
+        console.error('[OrbitportSDK] cTRNG generation failed:', error);
       }
       throw error;
     }
@@ -138,13 +138,13 @@ export class CTRNGService {
    */
   private async _getFromAPI(
     request: APICTRNGRequest,
-    options: RequestOptions
+    options: RequestOptions,
   ): Promise<ServiceResult<CTRNGResponse>> {
     const token = await this.getToken();
     if (!token) {
       throw new OrbitportSDKError(
-        "No valid authentication token available",
-        ERROR_CODES.AUTH_FAILED
+        'No valid authentication token available',
+        ERROR_CODES.AUTH_FAILED,
       );
     }
 
@@ -153,13 +153,13 @@ export class CTRNGService {
 
     // Add src parameter if specified (defaults to "trng")
     if (request.src) {
-      queryParams.append("src", request.src);
+      queryParams.append('src', request.src);
     }
 
     const fullUrl = queryParams.toString() ? `${url}?${queryParams}` : url;
 
     if (this.debug) {
-      console.log("[OrbitportSDK] Making API request to:", fullUrl);
+      console.log('[OrbitportSDK] Making API request to:', fullUrl);
     }
 
     try {
@@ -168,10 +168,10 @@ export class CTRNGService {
 
       try {
         const response = await fetch(fullUrl, {
-          method: "GET",
+          method: 'GET',
           headers: {
             Authorization: `Bearer ${token}`,
-            Accept: "application/json",
+            Accept: 'application/json',
             ...options.headers,
           },
           signal: controller.signal,
@@ -185,7 +185,7 @@ export class CTRNGService {
             apiError = await response.json();
           } catch {
             apiError = {
-              error: "Unknown error",
+              error: 'Unknown error',
               error_description: `HTTP ${response.status}: ${response.statusText}`,
             };
           }
@@ -197,15 +197,15 @@ export class CTRNGService {
 
         if (this.debug) {
           console.log(
-            "[OrbitportSDK] Raw API response:",
-            JSON.stringify(data, null, 2)
+            '[OrbitportSDK] Raw API response:',
+            JSON.stringify(data, null, 2),
           );
         }
 
         // Validate response structure
         this._validateResponse(data);
 
-        const requestId = response.headers.get("x-request-id");
+        const requestId = response.headers.get('x-request-id');
         const metadata: ResponseMetadata = {
           timestamp: Date.now(),
           ...(requestId && { request_id: requestId }),
@@ -226,20 +226,20 @@ export class CTRNGService {
       }
 
       if (error instanceof Error) {
-        if (error.name === "AbortError") {
+        if (error.name === 'AbortError') {
           throw new OrbitportSDKError(
-            "cTRNG request timeout",
-            ERROR_CODES.TIMEOUT
+            'cTRNG request timeout',
+            ERROR_CODES.TIMEOUT,
           );
         }
         throw createNetworkError(error);
       }
 
       throw new OrbitportSDKError(
-        "Unknown error during cTRNG request",
+        'Unknown error during cTRNG request',
         ERROR_CODES.UNKNOWN_ERROR,
         undefined,
-        error
+        error,
       );
     }
   }
@@ -249,33 +249,33 @@ export class CTRNGService {
    */
   private async _getFromIPFSBeacon(
     request: CTRNGRequest,
-    options: RequestOptions
+    options: RequestOptions,
   ): Promise<ServiceResult<CTRNGResponse>> {
     // Type guard to ensure this is an IPFS request
-    if (request.src !== "ipfs") {
+    if (request.src !== 'ipfs') {
       throw new OrbitportSDKError(
-        "Invalid request type for IPFS beacon",
-        ERROR_CODES.INVALID_REQUEST
+        'Invalid request type for IPFS beacon',
+        ERROR_CODES.INVALID_REQUEST,
       );
     }
 
-    const ipfsRequest = request as IPFSCTRNGRequest;
+    const ipfsRequest = request;
     const beaconPath =
       ipfsRequest.beaconPath || this.config.ipfs?.defaultBeaconPath;
 
     if (!beaconPath) {
       throw new OrbitportSDKError(
-        "No beacon path provided and no default beacon path configured",
-        ERROR_CODES.INVALID_REQUEST
+        'No beacon path provided and no default beacon path configured',
+        ERROR_CODES.INVALID_REQUEST,
       );
     }
 
     if (this.debug) {
-      console.log("[OrbitportSDK] Reading from IPFS sources:", {
+      console.log('[OrbitportSDK] Reading from IPFS sources:', {
         gateway: this.config.ipfs?.gateway,
         api: this.config.ipfs?.apiUrl,
         path: beaconPath,
-        block: ipfsRequest.block || "INF",
+        block: ipfsRequest.block || 'INF',
         index: ipfsRequest.index || 0,
       });
     }
@@ -285,21 +285,21 @@ export class CTRNGService {
       const ipfsResult = await this.beaconService.getBeaconWithBlockTraversal(
         {
           path: beaconPath,
-          sources: ["both"],
+          sources: ['both'],
           enableComparison: true,
           timeout: options.timeout,
           block: ipfsRequest.block,
         },
-        options
+        options,
       );
 
       // Handle comparison result
-      if ("match" in ipfsResult.data) {
+      if ('match' in ipfsResult.data) {
         const beaconData = ipfsResult.data.gateway || ipfsResult.data.api;
         if (!beaconData) {
           throw new OrbitportSDKError(
-            "No valid beacon data found from any source",
-            ERROR_CODES.INVALID_RESPONSE
+            'No valid beacon data found from any source',
+            ERROR_CODES.INVALID_RESPONSE,
           );
         }
 
@@ -307,12 +307,12 @@ export class CTRNGService {
         if (this.debug) {
           if (ipfsResult.data.match) {
             console.log(
-              "[OrbitportSDK] ✓ Gateway and API agree on sequence/previous"
+              '[OrbitportSDK] ✓ Gateway and API agree on sequence/previous',
             );
           } else {
             console.log(
-              "[OrbitportSDK] ⚠ Difference detected:",
-              ipfsResult.data.differences
+              '[OrbitportSDK] ⚠ Difference detected:',
+              ipfsResult.data.differences,
             );
           }
         }
@@ -331,14 +331,14 @@ export class CTRNGService {
             selectedBeaconData = ipfsResult.data.gateway;
             if (this.debug) {
               console.log(
-                `[OrbitportSDK] Using gateway data (sequence ${gatewaySeq} > API sequence ${apiSeq})`
+                `[OrbitportSDK] Using gateway data (sequence ${gatewaySeq} > API sequence ${apiSeq})`,
               );
             }
           } else if (apiSeq > gatewaySeq) {
             selectedBeaconData = ipfsResult.data.api;
             if (this.debug) {
               console.log(
-                `[OrbitportSDK] Using API data (sequence ${apiSeq} > gateway sequence ${gatewaySeq})`
+                `[OrbitportSDK] Using API data (sequence ${apiSeq} > gateway sequence ${gatewaySeq})`,
               );
             }
           }
@@ -348,8 +348,8 @@ export class CTRNGService {
         const ctrngArray = selectedBeaconData.ctrng;
         if (!ctrngArray || ctrngArray.length === 0) {
           throw new OrbitportSDKError(
-            "No cTRNG values found in beacon data",
-            ERROR_CODES.INVALID_RESPONSE
+            'No cTRNG values found in beacon data',
+            ERROR_CODES.INVALID_RESPONSE,
           );
         }
 
@@ -360,16 +360,16 @@ export class CTRNGService {
 
         if (this.debug && requestedIndex !== actualIndex) {
           console.log(
-            `[OrbitportSDK] index ${requestedIndex} adjusted to ${actualIndex} (array length: ${ctrngArray.length})`
+            `[OrbitportSDK] index ${requestedIndex} adjusted to ${actualIndex} (array length: ${ctrngArray.length})`,
           );
         }
 
         const ctrngResponse: CTRNGResponse = {
-          service: "ipfs-beacon",
-          src: "ipfs",
+          service: 'ipfs-beacon',
+          src: 'ipfs',
           data: ctrngValue.toString(),
           timestamp: selectedBeaconData.timestamp,
-          provider: "ipfs-beacon",
+          provider: 'ipfs-beacon',
         };
 
         return {
@@ -382,8 +382,8 @@ export class CTRNGService {
         const ctrngArray = ipfsResult.data.ctrng;
         if (!ctrngArray || ctrngArray.length === 0) {
           throw new OrbitportSDKError(
-            "No cTRNG values found in beacon data",
-            ERROR_CODES.INVALID_RESPONSE
+            'No cTRNG values found in beacon data',
+            ERROR_CODES.INVALID_RESPONSE,
           );
         }
 
@@ -394,16 +394,16 @@ export class CTRNGService {
 
         if (this.debug && requestedIndex !== actualIndex) {
           console.log(
-            `[OrbitportSDK] index ${requestedIndex} adjusted to ${actualIndex} (array length: ${ctrngArray.length})`
+            `[OrbitportSDK] index ${requestedIndex} adjusted to ${actualIndex} (array length: ${ctrngArray.length})`,
           );
         }
 
         const ctrngResponse: CTRNGResponse = {
-          service: "ipfs-beacon",
-          src: "ipfs",
+          service: 'ipfs-beacon',
+          src: 'ipfs',
           data: ctrngValue.toString(),
           timestamp: ipfsResult.data.timestamp,
-          provider: "ipfs-beacon",
+          provider: 'ipfs-beacon',
         };
 
         return {
@@ -414,7 +414,7 @@ export class CTRNGService {
       }
     } catch (error) {
       if (this.debug) {
-        console.error("[OrbitportSDK] IPFS beacon request failed:", error);
+        console.error('[OrbitportSDK] IPFS beacon request failed:', error);
       }
       throw error;
     }
@@ -425,56 +425,56 @@ export class CTRNGService {
    * @param data - Response data to validate
    */
   private _validateResponse(data: any): void {
-    if (!data || typeof data !== "object") {
+    if (!data || typeof data !== 'object') {
       throw new OrbitportSDKError(
-        "Invalid response: expected object",
-        ERROR_CODES.INVALID_RESPONSE
+        'Invalid response: expected object',
+        ERROR_CODES.INVALID_RESPONSE,
       );
     }
 
-    if (!data.service || typeof data.service !== "string") {
+    if (!data.service || typeof data.service !== 'string') {
       throw new OrbitportSDKError(
-        "Invalid response: missing or invalid service field",
-        ERROR_CODES.INVALID_RESPONSE
+        'Invalid response: missing or invalid service field',
+        ERROR_CODES.INVALID_RESPONSE,
       );
     }
 
-    if (!data.src || typeof data.src !== "string") {
+    if (!data.src || typeof data.src !== 'string') {
       throw new OrbitportSDKError(
-        "Invalid response: missing or invalid src field",
-        ERROR_CODES.INVALID_RESPONSE
+        'Invalid response: missing or invalid src field',
+        ERROR_CODES.INVALID_RESPONSE,
       );
     }
 
-    if (!data.data || typeof data.data !== "string") {
+    if (!data.data || typeof data.data !== 'string') {
       throw new OrbitportSDKError(
-        "Invalid response: missing or invalid data field",
-        ERROR_CODES.INVALID_RESPONSE
+        'Invalid response: missing or invalid data field',
+        ERROR_CODES.INVALID_RESPONSE,
       );
     }
 
     // Signature is optional - not all responses include it
     if (data.signature) {
-      if (typeof data.signature !== "object") {
+      if (typeof data.signature !== 'object') {
         throw new OrbitportSDKError(
-          "Invalid response: invalid signature field",
-          ERROR_CODES.INVALID_RESPONSE
+          'Invalid response: invalid signature field',
+          ERROR_CODES.INVALID_RESPONSE,
         );
       }
 
       const { signature } = data;
       if (!signature.value) {
         throw new OrbitportSDKError(
-          "Invalid response: missing signature value",
-          ERROR_CODES.INVALID_RESPONSE
+          'Invalid response: missing signature value',
+          ERROR_CODES.INVALID_RESPONSE,
         );
       }
 
       // Note: pk can be empty string according to API docs
       if (signature.pk === undefined) {
         throw new OrbitportSDKError(
-          "Invalid response: missing signature pk field",
-          ERROR_CODES.INVALID_RESPONSE
+          'Invalid response: missing signature pk field',
+          ERROR_CODES.INVALID_RESPONSE,
         );
       }
     }

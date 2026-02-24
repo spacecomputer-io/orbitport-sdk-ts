@@ -44,7 +44,8 @@ describe("Orbitport SDK E2E Tests", () => {
       const config = sdk.getConfig();
       expect(config.clientId).toBe("[REDACTED]");
       expect(config.clientSecret).toBe("[REDACTED]");
-      expect(config.authUrl).toBeDefined();
+      expect(config.authDomain).toBeDefined();
+      expect(config.audience).toBeDefined();
       expect(config.apiUrl).toBeDefined();
     });
   });
@@ -266,7 +267,7 @@ describe("Orbitport SDK E2E Tests", () => {
       });
 
       const customBeaconPath =
-        "/ipns/k2k4r8pigrw8i34z63om8f015tt5igdq0c46xupq8spp1bogt35k5vhe";
+        "/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f";
       const result = await ipfsSdk.ctrng.random({
         src: "ipfs",
         beaconPath: customBeaconPath,
