@@ -44,7 +44,8 @@ describe("Orbitport SDK E2E Tests", () => {
       const config = sdk.getConfig();
       expect(config.clientId).toBe("[REDACTED]");
       expect(config.clientSecret).toBe("[REDACTED]");
-      expect(config.authUrl).toBeDefined();
+      expect(config.authDomain).toBeDefined();
+      expect(config.audience).toBeDefined();
       expect(config.apiUrl).toBeDefined();
     });
   });

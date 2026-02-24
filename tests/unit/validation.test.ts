@@ -20,7 +20,8 @@ describe("Validation Utilities", () => {
       const config = {
         clientId: "test-client-id",
         clientSecret: "test-client-secret",
-        authUrl: "https://auth.example.com",
+        authDomain: "auth.example.com",
+        audience: "https://api.example.com/api",
         apiUrl: "https://api.example.com",
         timeout: 30000,
         retryAttempts: 3,
@@ -60,13 +61,13 @@ describe("Validation Utilities", () => {
       const config = {
         clientId: "test-client-id",
         clientSecret: "test-client-secret",
-        authUrl: "not-a-url",
+        audience: "not-a-url",
         apiUrl: "also-not-a-url",
       };
 
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain("authUrl must be a valid URL");
+      expect(result.errors).toContain("audience must be a valid URL");
       expect(result.errors).toContain("apiUrl must be a valid URL");
     });
 
@@ -316,7 +317,8 @@ describe("Validation Utilities", () => {
       const result = sanitizeConfig(config);
       expect(result.clientId).toBe("test-client-id");
       expect(result.clientSecret).toBe("test-client-secret");
-      expect(result.authUrl).toBeDefined();
+      expect(result.authDomain).toBeDefined();
+      expect(result.audience).toBeDefined();
       expect(result.apiUrl).toBeDefined();
       expect(result.timeout).toBe(30000);
       expect(result.retryAttempts).toBe(3);
