@@ -17,11 +17,11 @@ const mockConfig = {
 };
 
 describe("IPFSService", () => {
-  let ipfsService: IPFSService;
+  let ipfsService: BeaconService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    ipfsService = new IPFSService(mockConfig, true);
+    ipfsService = new BeaconService(mockConfig, true);
   });
 
   describe("getBeacon", () => {

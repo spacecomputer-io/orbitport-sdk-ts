@@ -118,8 +118,8 @@ export class AuthService {
    * Requests a new access token from the authentication server
    */
   private async requestNewToken(): Promise<TokenData | null> {
-    const authUrl = `${this.config.authUrl}/oauth/token`;
-    const audience = `${this.config.apiUrl}/api`;
+    const authUrl = `https://${this.config.authDomain}/oauth/token`;
+    const audience = this.config.audience;
 
     const requestBody = {
       client_id: this.config.clientId,
