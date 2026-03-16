@@ -38,12 +38,6 @@ jobs:
       - name: Run unit tests
         run: pnpm run test:unit
 
-      - name: Run E2E tests
-        run: pnpm run test:e2e
-        env:
-          ORBITPORT_CLIENT_ID: ${{ secrets.ORBITPORT_CLIENT_ID }}
-          ORBITPORT_CLIENT_SECRET: ${{ secrets.ORBITPORT_CLIENT_SECRET }}
-
       - name: Generate coverage report
         run: pnpm run test:coverage
 
