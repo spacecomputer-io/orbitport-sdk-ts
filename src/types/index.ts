@@ -8,7 +8,8 @@ import type { ErrorCode } from '../utils/errors';
 export interface OrbitportConfig {
   clientId?: string;
   clientSecret?: string;
-  authUrl?: string;
+  authDomain?: string;
+  audience?: string;
   apiUrl?: string;
   timeout?: number;
   retryAttempts?: number;

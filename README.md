@@ -50,7 +50,8 @@ The SDK can be initialized with or without API credentials.
 interface OrbitportConfig {
   clientId?: string; // Optional: Your client ID
   clientSecret?: string; // Optional: Your client secret
-  authUrl?: string; // Optional: Auth server URL
+  authDomain?: string; // Optional: Auth domain (default: "auth.spacecomputer.io")
+  audience?: string; // Optional: Auth audience URL (default: "https://op.spacecomputer.io/api")
   apiUrl?: string; // Optional: API server URL
   timeout?: number; // Optional: Request timeout in ms (default: 30000)
   retryAttempts?: number; // Optional: Retry attempts (default: 3)
