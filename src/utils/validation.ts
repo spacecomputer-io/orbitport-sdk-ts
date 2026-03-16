@@ -46,11 +46,17 @@ export function validateConfig(
     errors.push('Both clientId and clientSecret must be provided together');
   }
 
-  if (config.authUrl) {
-    if (typeof config.authUrl !== 'string') {
-      errors.push('authUrl must be a string');
-    } else if (!isValidUrl(config.authUrl)) {
-      errors.push('authUrl must be a valid URL');
+  if (config.authDomain) {
+    if (typeof config.authDomain !== 'string' || config.authDomain.trim().length === 0) {
+      errors.push('authDomain must be a non-empty string');
+    }
+  }
+
+  if (config.audience) {
+    if (typeof config.audience !== 'string') {
+      errors.push('audience must be a string');
+    } else if (!isValidUrl(config.audience)) {
+      errors.push('audience must be a valid URL');
     }
   }
 
@@ -264,7 +270,8 @@ export function sanitizeConfig(
   return {
     clientId: config.clientId?.trim(),
     clientSecret: config.clientSecret?.trim(),
-    authUrl: config.authUrl || getDefaultAuthUrl(),
+    authDomain: config.authDomain?.trim() || getDefaultAuthDomain(),
+    audience: config.audience?.trim() || getDefaultAudience(),
     apiUrl: config.apiUrl || getDefaultApiUrl(),
     timeout: config.timeout || 30000,
     retryAttempts: config.retryAttempts || 3,
@@ -300,10 +307,17 @@ export function sanitizeRequestOptions(
 }
 
 /**
- * Gets default auth URL
+ * Gets default auth domain
  */
-function getDefaultAuthUrl(): string {
-  return 'https://dev-1usujmbby8627ni8.us.auth0.com';
+function getDefaultAuthDomain(): string {
+  return 'auth.spacecomputer.io';
+}
+
+/**
+ * Gets default audience
+ */
+function getDefaultAudience(): string {
+  return 'https://op.spacecomputer.io/api';
 }
 
 /**

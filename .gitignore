@@ -101,3 +101,5 @@ temp/
 *.njsproj
 *.sln
 *.sw?
+
+CLAUDE.md

@@ -19,7 +19,8 @@ global.fetch = jest.fn();
 const mockConfig: OrbitportConfig = {
   clientId: "test-client-id",
   clientSecret: "test-client-secret",
-  authUrl: "https://test-auth.com",
+  authDomain: "test-auth.com",
+  audience: "https://test-api.com/api",
   apiUrl: "https://test-api.com",
   timeout: 30000,
   retryAttempts: 3,
