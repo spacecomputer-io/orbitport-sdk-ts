@@ -3,10 +3,10 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main, develop]
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches: [main]
-  release:
-    types: [published]
 
 jobs:
   test:
@@ -71,7 +71,10 @@ jobs:
   publish:
     needs: [test, build]
     runs-on: ubuntu-latest
-    if: github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v4
@@ -91,10 +94,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate version match
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version (v$TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+          echo "Version match confirmed: $PKG_VERSION"
+
+      - name: Determine npm dist-tag
+        id: dist-tag
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          if echo "$TAG_VERSION" | grep -q "alpha"; then
+            echo "tag=alpha" >> "$GITHUB_OUTPUT"
+          elif echo "$TAG_VERSION" | grep -q "beta"; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          elif echo "$TAG_VERSION" | grep -q "rc"; then
+            echo "tag=rc" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Publishing with dist-tag: $(cat "$GITHUB_OUTPUT" | grep tag | cut -d= -f2)"
+
       - name: Build package
         run: pnpm run build
 
       - name: Publish to npm
-        run: pnpm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm publish --access public --tag ${{ steps.dist-tag.outputs.tag }} --no-git-checks --provenance

@@ -307,7 +307,7 @@ export function sanitizeRequestOptions(
 }
 
 /**
- * Gets default auth URL
+ * Gets default auth domain
  */
 function getDefaultAuthDomain(): string {
   return 'auth.spacecomputer.io';
