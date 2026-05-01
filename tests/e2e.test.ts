@@ -565,4 +565,152 @@ describe("Orbitport SDK E2E Tests", () => {
       expect(result.success).toBe(true);
     });
   });
+
+  describe("KMS Service", () => {
+    if (process.env.ORBITPORT_KMS_ENABLED !== "true") {
+      console.warn(
+        "Skipping KMS E2E tests: set ORBITPORT_KMS_ENABLED=true to enable (op-prod may not have KMS deployed)"
+      );
+      return;
+    }
+
+    const stamp = Date.now();
+    let transitKeyId: string | undefined;
+    let ethereumKeyId: string | undefined;
+
+    it("getCapabilities returns TRANSIT and ETHEREUM", async () => {
+      const res = await sdk.kms.getCapabilities();
+      expect(res.success).toBe(true);
+      const schemes = res.data.Schemes.map((s) => s.Scheme);
+      expect(schemes).toEqual(expect.arrayContaining(["TRANSIT", "ETHEREUM"]));
+    });
+
+    it("TRANSIT lifecycle: createKey → encrypt → decrypt", async () => {
+      const created = await sdk.kms.createKey({
+        alias: `sdk-e2e-${stamp}-aes`,
+        keySpec: "AES_256_GCM96",
+        keyUsage: "ENCRYPT_DECRYPT",
+        scheme: "TRANSIT",
+      });
+      transitKeyId = created.data.KeyMetadata.KeyId;
+      expect(transitKeyId).toBeDefined();
+
+      const enc = await sdk.kms.encrypt({
+        keyId: transitKeyId,
+        plaintext: "hello",
+      });
+      expect(enc.data.CiphertextBlob.length).toBeGreaterThan(0);
+
+      const dec = await sdk.kms.decrypt({
+        keyId: transitKeyId,
+        ciphertextBlob: enc.data.CiphertextBlob,
+      });
+      expect(dec.data.Plaintext).toBe("hello");
+    });
+
+    it("decrypt with encoding 'bytes' preserves binary fidelity", async () => {
+      // Reuse the TRANSIT key from the previous test if present.
+      let keyId = transitKeyId;
+      if (!keyId) {
+        const created = await sdk.kms.createKey({
+          alias: `sdk-e2e-${stamp}-aes-bin`,
+          keySpec: "AES_256_GCM96",
+          keyUsage: "ENCRYPT_DECRYPT",
+          scheme: "TRANSIT",
+        });
+        keyId = created.data.KeyMetadata.KeyId;
+      }
+      const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x00, 0xff, 0x80]);
+      const enc = await sdk.kms.encrypt({
+        keyId,
+        plaintext: bytes,
+        encoding: "bytes",
+      });
+      const dec = await sdk.kms.decrypt({
+        keyId,
+        ciphertextBlob: enc.data.CiphertextBlob,
+        encoding: "bytes",
+      });
+      expect(dec.data.Plaintext).toEqual(bytes);
+    });
+
+    it("ECDSA_P256 sign with DIGEST messageType returns base64 signature", async () => {
+      const created = await sdk.kms.createKey({
+        alias: `sdk-e2e-${stamp}-ecdsa`,
+        keySpec: "ECDSA_P256",
+        keyUsage: "SIGN_VERIFY",
+        scheme: "TRANSIT",
+      });
+      const sig = await sdk.kms.sign({
+        keyId: created.data.KeyMetadata.KeyId,
+        // 32-byte SHA-256 digest of empty string
+        message: new Uint8Array([
+          0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8,
+          0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+          0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+        ]),
+        signingAlgorithm: "ECDSA_SHA_256",
+        messageType: "DIGEST",
+      });
+      expect(sig.data.Signature.length).toBeGreaterThan(0);
+    });
+
+    it("ETHEREUM key exposes Address and signs EIP191", async () => {
+      const created = await sdk.kms.createKey({
+        alias: `sdk-e2e-${stamp}-eth`,
+        keySpec: "ECC_SECG_P256K1",
+        keyUsage: "SIGN_VERIFY",
+        scheme: "ETHEREUM",
+      });
+      ethereumKeyId = created.data.KeyMetadata.KeyId;
+      const md = created.data.KeyMetadata;
+      expect(md.Address).toBeDefined();
+      expect(md.Address!.startsWith("0x")).toBe(true);
+      expect(md.Address!.length).toBe(42);
+
+      const sig = await sdk.kms.sign({
+        keyId: ethereumKeyId,
+        message: "hello eth",
+        signingAlgorithm: "ETHEREUM_SECP256K1",
+        messageType: "EIP191",
+      });
+      expect(sig.data.Signature.length).toBeGreaterThan(0);
+    });
+
+    it("generateDataKey returns Plaintext + CiphertextBlob (raw base64)", async () => {
+      let keyId = transitKeyId;
+      if (!keyId) {
+        const created = await sdk.kms.createKey({
+          alias: `sdk-e2e-${stamp}-dk-host`,
+          keySpec: "AES_256_GCM96",
+          keyUsage: "ENCRYPT_DECRYPT",
+          scheme: "TRANSIT",
+        });
+        keyId = created.data.KeyMetadata.KeyId;
+      }
+      const dk = await sdk.kms.generateDataKey({
+        keyId,
+        dataKeySpec: "AES_256",
+      });
+      expect(dk.data.Plaintext.length).toBeGreaterThan(0);
+      expect(dk.data.CiphertextBlob.length).toBeGreaterThan(0);
+    });
+
+    it("rotateKey increments PrimaryVersion", async () => {
+      let keyId = transitKeyId;
+      if (!keyId) {
+        const created = await sdk.kms.createKey({
+          alias: `sdk-e2e-${stamp}-rot`,
+          keySpec: "AES_256_GCM96",
+          keyUsage: "ENCRYPT_DECRYPT",
+          scheme: "TRANSIT",
+        });
+        keyId = created.data.KeyMetadata.KeyId;
+      }
+      const before = await sdk.kms.rotateKey({ keyId });
+      const v1 = before.data.KeyMetadata.PrimaryVersion;
+      const after = await sdk.kms.rotateKey({ keyId });
+      expect(after.data.KeyMetadata.PrimaryVersion).toBeGreaterThan(v1);
+    });
+  });
 });

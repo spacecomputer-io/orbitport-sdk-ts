@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- `sdk.kms` Key Management Service — new methods: `createKey`, `encrypt`, `decrypt`, `sign`, `generateDataKey`, `rotateKey`, `getCapabilities`. Talks JSON-RPC 2.0 at `POST /api/v1/rpc`. Supports TRANSIT and ETHEREUM schemes.
+- `encoding: "utf8" | "bytes"` option on `kms.encrypt` / `kms.decrypt` — default `"utf8"` keeps auto-decoding to string; pass `"bytes"` for lossless binary `Uint8Array`.
+- Shared JSON-RPC 2.0 transport (`src/utils/jsonrpc.ts`) with HTTP and JSON-RPC error mapping; raw RPC code preserved in `error.details.jsonRpcCode`.
+- Base64 helpers exported from the SDK: `toBase64`, `fromBase64ToUtf8`, `fromBase64ToUint8Array`.
+- New error codes: `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`.
+- `examples/kms-usage.ts` and `pnpm run examples:kms` script.
+
 ## [0.1.0] - 2026-02-24
 
 ### Breaking Changes

@@ -35,6 +35,7 @@ console.log(resultIPFSOnly.data.data);
 - 🛰️ **IPFS Beacon Support** - Fallback to decentralized IPFS beacons for cTRNG data.
 - 🔄 **Automatic Fallback** - Defaults to API if credentials are provided, with automatic fallback to IPFS.
 - 🔐 **Secure Authentication** - Built-in token management with automatic refresh for API access.
+- 🔑 **Key Management Service (KMS)** - Create, encrypt, decrypt, sign, generate data keys, and rotate keys (TRANSIT + ETHEREUM schemes) over JSON-RPC 2.0.
 - 비교 **Source Comparison** - Always reads from both IPFS gateway and API to ensure data integrity, just like `beacon.js`.
 - 💾 **Flexible Storage** - Works in browser, Node.js, and custom environments.
 - 📦 **TypeScript First** - Full type safety and IntelliSense support.
@@ -170,6 +171,103 @@ try {
     console.log("Error message:", error.message);
   }
 }
+```
+
+## Key Management Service (`sdk.kms`)
+
+The KMS service talks JSON-RPC 2.0 to the Orbitport gateway at `POST /api/v1/rpc`. **It requires API credentials** — there is no IPFS fallback. Inputs are camelCase; outputs preserve the gateway's PascalCase wire shape so server documentation can be grepped directly.
+
+```typescript
+import { OrbitportSDK } from "@spacecomputer/orbitport-sdk";
+
+const sdk = new OrbitportSDK({
+  config: { clientId: "...", clientSecret: "..." },
+});
+
+const key = await sdk.kms.createKey({
+  alias: "demo-key",
+  keySpec: "AES_256_GCM96",
+  keyUsage: "ENCRYPT_DECRYPT",
+});
+
+const enc = await sdk.kms.encrypt({
+  keyId: key.data.KeyMetadata.KeyId,
+  plaintext: "hello kms",
+});
+
+const dec = await sdk.kms.decrypt({
+  keyId: key.data.KeyMetadata.KeyId,
+  ciphertextBlob: enc.data.CiphertextBlob,
+});
+console.log(dec.data.Plaintext); // "hello kms"
+```
+
+### Methods
+
+| Method | Description |
+| --- | --- |
+| `createKey({ alias, keySpec, keyUsage, scheme?, description?, tags? })` | Create a new key (`scheme`: `"TRANSIT"` (default) or `"ETHEREUM"`). |
+| `encrypt({ keyId, plaintext, encoding?, encryptionAlgorithm? })` | Encrypt under a TRANSIT key. |
+| `decrypt({ ciphertextBlob, keyId?, encoding?, encryptionAlgorithm? })` | Decrypt a previously produced ciphertext. |
+| `sign({ keyId, message, signingAlgorithm, messageType? })` | Sign a message or precomputed digest. |
+| `generateDataKey({ keyId, dataKeySpec? \| numberOfBytes? })` | Envelope encryption helper — returns a fresh data key, both as plaintext and wrapped under `keyId`. |
+| `rotateKey({ keyId })` | Rotate the key's primary version. |
+| `getCapabilities()` | Discover supported schemes / algorithms (falls back to a static list when the gateway lacks this method). |
+
+All methods return `Promise<ServiceResult<T>>` with `T` shaped to match the wire response.
+
+### Plaintext encoding
+
+`encrypt` and `decrypt` accept an `encoding: "utf8" | "bytes"` option (default `"utf8"`). The default keeps the auto-decode behavior most callers want; pass `"bytes"` for binary fidelity.
+
+```typescript
+// "utf8" (default) — input string ↔ output string
+await sdk.kms.encrypt({ keyId, plaintext: "hello" });
+const dec = await sdk.kms.decrypt({ keyId, ciphertextBlob });
+// dec.data.Plaintext: string
+
+// "bytes" — input Uint8Array ↔ output Uint8Array (lossless)
+const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+const enc = await sdk.kms.encrypt({ keyId, plaintext: bytes, encoding: "bytes" });
+const decBytes = await sdk.kms.decrypt({
+  keyId,
+  ciphertextBlob: enc.data.CiphertextBlob,
+  encoding: "bytes",
+});
+// decBytes.data.Plaintext: Uint8Array
+```
+
+`generateDataKey` returns `Plaintext` as raw base64 (binary key material — no `encoding` flag). Use the exported helpers to decode manually when needed:
+
+```typescript
+import { fromBase64ToUint8Array } from "@spacecomputer/orbitport-sdk";
+const dk = await sdk.kms.generateDataKey({ keyId, dataKeySpec: "AES_256" });
+const rawBytes = fromBase64ToUint8Array(dk.data.Plaintext);
+```
+
+The SDK also exports `toBase64` and `fromBase64ToUtf8` for direct use.
+
+### ETHEREUM scheme
+
+Keys created with `scheme: "ETHEREUM"` (and `keySpec: "ECC_SECG_P256K1"`) expose an `Address` field on `KeyMetadata`. Use `signingAlgorithm: "ETHEREUM_SECP256K1"` together with `messageType: "EIP191"` for personal-sign style messages.
+
+### Errors and retries
+
+KMS methods do **not** retry by default — `CreateKey` and `Sign` are not idempotent. Pass `RequestOptions.retries` per call when you want retry behavior.
+
+Possible error codes (in addition to the standard SDK codes): `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`. Errors raised from the JSON-RPC layer expose the raw RPC code in `error.details.jsonRpcCode` for advanced branching.
+
+### Gateway availability
+
+If your gateway returns `404` for `/api/v1/rpc` (e.g. older op-prod builds), set `apiUrl` in the SDK config to a gateway that has KMS deployed (such as `https://op-dev.spacecomputer.io`).
+
+### Example
+
+A full walkthrough lives in [`examples/kms-usage.ts`](examples/kms-usage.ts). Run it with:
+
+```bash
+ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
+  pnpm run examples:kms
 ```
 
 ## IPFS Beacon Integration Details
