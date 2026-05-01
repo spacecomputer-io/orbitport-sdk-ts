@@ -1,6 +1,11 @@
 # Orbitport SDK
 
-Official TypeScript SDK for SpaceComputer Orbitport - providing access to cosmic True Random Number Generator (cTRNG) services.
+Official TypeScript SDK for SpaceComputer Orbitport. One client, all Orbitport products — accessed as peers under a single facade.
+
+| Product | Namespace | What it does |
+| --- | --- | --- |
+| cTRNG | `sdk.ctrng` | Cosmic True Random Number Generation (API or IPFS beacon). |
+| KMS | `sdk.kms` | Key Management Service — create, encrypt, decrypt, sign, generate data keys, rotate (TRANSIT + ETHEREUM schemes). |
 
 ## Installation
 
@@ -13,39 +18,43 @@ npm i @spacecomputer-io/orbitport-sdk-ts
 ```typescript
 import { OrbitportSDK } from "@spacecomputer/orbitport-sdk";
 
-// With API credentials (tries API first, falls back to IPFS)
-const sdkWithAPI = new OrbitportSDK({
+const sdk = new OrbitportSDK({
   config: {
     clientId: "your-client-id",
     clientSecret: "your-client-secret",
   },
 });
-const resultWithAPI = await sdkWithAPI.ctrng.random();
-console.log(resultWithAPI.data.data);
 
-// Without API credentials (uses IPFS only)
-const sdkIPFSOnly = new OrbitportSDK({ config: {} });
-const resultIPFSOnly = await sdkIPFSOnly.ctrng.random();
-console.log(resultIPFSOnly.data.data);
+// cTRNG — cosmic randomness
+const random = await sdk.ctrng.random();
+console.log(random.data.data);
+
+// KMS — create a key and sign with it
+const key = await sdk.kms.createKey({
+  alias: "demo",
+  keySpec: "ECDSA_P256",
+  keyUsage: "SIGN_VERIFY",
+});
+const sig = await sdk.kms.sign({
+  keyId: key.data.KeyMetadata.KeyId,
+  message: "hello orbitport",
+  signingAlgorithm: "ECDSA_SHA_256",
+});
 ```
 
 ## Features
 
-- 🌌 **Cosmic True Random Number Generation** - Access space-based randomness via API or IPFS.
-- 🛰️ **IPFS Beacon Support** - Fallback to decentralized IPFS beacons for cTRNG data.
-- 🔄 **Automatic Fallback** - Defaults to API if credentials are provided, with automatic fallback to IPFS.
-- 🔐 **Secure Authentication** - Built-in token management with automatic refresh for API access.
-- 🔑 **Key Management Service (KMS)** - Create, encrypt, decrypt, sign, generate data keys, and rotate keys (TRANSIT + ETHEREUM schemes) over JSON-RPC 2.0.
-- 비교 **Source Comparison** - Always reads from both IPFS gateway and API to ensure data integrity, just like `beacon.js`.
-- 💾 **Flexible Storage** - Works in browser, Node.js, and custom environments.
-- 📦 **TypeScript First** - Full type safety and IntelliSense support.
-- 🛡️ **Production Ready** - Comprehensive error handling and validation.
+- 🛰️ **Single facade for every Orbitport product** — `sdk.ctrng`, `sdk.kms`, and future services share one config, one auth flow, one error model.
+- 🔐 **Built-in OAuth2** — automatic token acquisition, caching, and refresh.
+- 📦 **TypeScript first** — full type safety and IntelliSense across every product.
+- 🛡️ **Consistent error model** — typed `OrbitportSDKError` with stable codes across products.
+- 💾 **Flexible storage** — browser, Node.js, and custom token stores.
+- 🌌 **cTRNG specific:** API source with automatic IPFS-beacon fallback, dual-source comparison for integrity.
+- 🔑 **KMS specific:** TRANSIT (AES, ECDSA, Ed25519, RSA) and ETHEREUM (secp256k1) schemes over JSON-RPC 2.0.
 
-## API Reference
+## Configuration
 
-### Configuration
-
-The SDK can be initialized with or without API credentials.
+The SDK can be initialized with or without API credentials. Credentials unlock authenticated products (KMS, cTRNG via API); cTRNG can also run credential-less against the public IPFS beacon.
 
 ```typescript
 interface OrbitportConfig {
@@ -57,7 +66,7 @@ interface OrbitportConfig {
   timeout?: number; // Optional: Request timeout in ms (default: 30000)
   retryAttempts?: number; // Optional: Retry attempts (default: 3)
   retryDelay?: number; // Optional: Retry delay in ms (default: 1000)
-  ipfs?: IPFSConfig; // Optional: Custom IPFS settings
+  ipfs?: IPFSConfig; // Optional: cTRNG-specific IPFS beacon overrides
 }
 
 interface IPFSConfig {
@@ -68,7 +77,17 @@ interface IPFSConfig {
 }
 ```
 
-### cTRNG Service (`sdk.ctrng`)
+All products return a uniform `ServiceResult<T>`:
+
+```typescript
+interface ServiceResult<T> {
+  data: T;
+  metadata: { timestamp: number; request_id?: string };
+  success: boolean;
+}
+```
+
+## cTRNG (`sdk.ctrng`)
 
 #### `random(request?, options?)`
 
@@ -117,20 +136,9 @@ const latestValue = await sdk.ctrng.random({
 });
 ```
 
-### Response Structure
-
-All `random()` calls return a consistent response structure:
+### cTRNG response shape
 
 ```typescript
-interface ServiceResult<CTRNGResponse> {
-  data: CTRNGResponse;
-  metadata: {
-    timestamp: number;
-    request_id?: string;
-  };
-  success: boolean;
-}
-
 interface CTRNGResponse {
   service: string; // "trng", "rng", or "ipfs-beacon"
   src: string; // "trng", "rng", or "ipfs"
@@ -144,36 +152,61 @@ interface CTRNGResponse {
 }
 ```
 
-### Authentication (`sdk.auth`)
+### IPFS beacon
 
-Authentication methods are only relevant when using the API.
+cTRNG can read from a decentralized IPFS beacon, either as the primary source (no credentials provided) or as automatic fallback when the API is unreachable. The SDK reads from both an IPFS gateway and an IPFS API node and compares the two for integrity, mirroring the upstream `beacon.js` reference.
 
-```typescript
-// Check if token is valid
-const isValid = await sdk.auth.isTokenValid();
+**Defaults:**
+- **Gateway**: `https://ipfs.io`
+- **API**: `https://ipfs.io`
+- **Default beacon**: `/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f`
 
-// Get token information
-const tokenInfo = await sdk.auth.getTokenInfo();
+Override any of these via `OrbitportConfig.ipfs`.
+
+When `debug: true` is enabled, you'll see the dual-source comparison:
+
+```
+[OrbitportSDK] Reading from BOTH IPFS sources:
+  - Gateway: https://ipfs.io
+  - API: https://ipfs.io
+  - Path: /ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f
+
+[OrbitportSDK] ✓ Gateway and API agree on sequence/previous
 ```
 
-### Error Handling
+**Array selection and block traversal:**
 
-The SDK provides comprehensive error handling with specific error types:
+IPFS beacons contain arrays of cTRNG values posted in batches; each beacon links to the previous block via a `previous` field, forming a chain. You can:
+
+1. Select specific values from the array via `index`
+2. Traverse back through blocks via `block`
 
 ```typescript
-import { OrbitportSDKError, ERROR_CODES } from "@spacecomputer/orbitport-sdk";
+// Second cTRNG value from latest block
+await sdk.ctrng.random({ src: "ipfs", index: 1 });
 
-try {
-  const result = await sdk.ctrng.random();
-} catch (error) {
-  if (error instanceof OrbitportSDKError) {
-    console.log("Error code:", error.code); // e.g., AUTH_FAILED, NETWORK_ERROR
-    console.log("Error message:", error.message);
-  }
-}
+// Specific block
+await sdk.ctrng.random({ src: "ipfs", block: 10012, index: 2 });
+
+// Latest block (default)
+await sdk.ctrng.random({ src: "ipfs", block: "INF", index: 0 });
 ```
 
-## Key Management Service (`sdk.kms`)
+Notes:
+- `index` is 0-based; out-of-bounds indices wrap via modulo against the array length, so requests never fail on length.
+- `block` accepts `"INF"` (latest, default) or a numeric block. Requesting a block above the current head throws.
+- Block traversal walks the `previous` chain backwards from the latest block.
+- With `debug: true`, the SDK logs traversal and index adjustments.
+
+### Example
+
+A full walkthrough lives in [`examples/ctrng.ts`](examples/ctrng.ts). Run it with:
+
+```bash
+pnpm run examples:ctrng
+```
+
+## KMS (`sdk.kms`)
 
 The KMS service talks JSON-RPC 2.0 to the Orbitport gateway at `POST /api/v1/rpc`. It requires API credentials. Inputs are camelCase; outputs preserve the gateway's PascalCase wire shape so server documentation can be grepped directly.
 
@@ -266,75 +299,34 @@ ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
   pnpm run examples:kms
 ```
 
-## IPFS Beacon Integration Details
+## Authentication (`sdk.auth`)
 
-The SDK's IPFS integration is designed to mirror the functionality of the `beacon.js` script, providing robustness and verifiability.
-
-### Default IPFS Configuration
-
-- **Gateway**: `https://ipfs.io`
-- **API**: `https://ipfs.io`
-- **Default Beacon**: `/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f`
-
-You can override these defaults in the SDK configuration.
-
-### Debug Output
-
-When `debug: true` is enabled, you will see detailed logs, including the IPFS source comparison:
-
-```
-[OrbitportSDK] Reading from BOTH IPFS sources:
-  - Gateway: https://ipfs.io
-  - API: https://ipfs.io
-  - Path: /ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f
-
-[OrbitportSDK] ✓ Gateway and API agree on sequence/previous
-```
-
-### cTRNG Array Selection and Block Traversal
-
-IPFS beacons contain arrays of cTRNG values that are posted in batches. Each beacon also has a "previous" property that links to the previous block, creating a chain. The SDK allows you to:
-
-1. **Select specific values** from the cTRNG array using the `index` parameter
-2. **Traverse back through blocks** using the `block` parameter
+OAuth2 client-credentials handling shared across every product. Tokens are acquired on first use, cached, and refreshed transparently — you usually don't need to touch `sdk.auth` directly.
 
 ```typescript
-// Get the first cTRNG value from latest block (default)
-const firstValue = await sdk.ctrng.random({ src: "ipfs" });
-
-// Get the second cTRNG value from latest block (index 1)
-const secondValue = await sdk.ctrng.random({
-  src: "ipfs",
-  index: 1,
-});
-
-// Get cTRNG from a specific block (traverse back through the chain)
-const blockValue = await sdk.ctrng.random({
-  src: "ipfs",
-  block: 10012, // Get from block 10012
-  index: 2, // Select the 3rd value from that block
-});
-
-// Get latest block with specific index
-const latestValue = await sdk.ctrng.random({
-  src: "ipfs",
-  block: "INF", // Latest block (default)
-  index: 0, // First value (default)
-});
+const isValid = await sdk.auth.isTokenValid();
+const tokenInfo = await sdk.auth.getTokenInfo();
+await sdk.auth.clearToken();
 ```
 
-**Important Notes:**
+## Error handling
 
-- The `index` parameter is 0-based (first value is index 0)
-- The `block` parameter can be:
-  - `"INF"` (default) - Get from the latest block
-  - A number - Traverse back through the chain to that specific block
-- If the requested index exceeds the array length, it will be automatically adjusted using modulo operation
-- For example, if the beacon has 3 values and you request index 5, it will return index 2 (5 % 3 = 2)
-- If the requested block is greater than the current block, an error will be thrown
-- Block traversal follows the "previous" chain, so requesting block 10012 will check the latest block, then traverse back until it finds block 10012
-- This prevents out-of-bounds errors and ensures the request never fails
-- When debug mode is enabled, you'll see detailed logs about block traversal and index adjustments
+Every product throws `OrbitportSDKError` with a typed `code` from `ERROR_CODES`. KMS additionally exposes the raw JSON-RPC error code via `error.details.jsonRpcCode`.
+
+```typescript
+import { OrbitportSDKError, ERROR_CODES } from "@spacecomputer/orbitport-sdk";
+
+try {
+  await sdk.ctrng.random();
+  await sdk.kms.sign({ keyId, message: "hi", signingAlgorithm: "ECDSA_SHA_256" });
+} catch (error) {
+  if (error instanceof OrbitportSDKError) {
+    console.log(error.code); // AUTH_FAILED, NETWORK_ERROR, KMS_KEY_NOT_FOUND, …
+  }
+}
+```
+
+Common codes: `AUTH_FAILED`, `NETWORK_ERROR`, `TIMEOUT`, `RATE_LIMITED`, `VALIDATION_ERROR`, `API_ERROR`. KMS adds `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`.
 
 ## Development
 

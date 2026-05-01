@@ -14,6 +14,10 @@ All notable changes to this project will be documented in this file.
 - `examples/kms.ts` and `pnpm run examples:kms` script.
 - Renamed `examples/basic-usage.ts` to `examples/ctrng.ts`; the corresponding script is `pnpm run examples:ctrng`.
 
+### Changed
+
+- README and SDK doc-comments now position the SDK as a multi-product facade. cTRNG and KMS sit as peer products; IPFS beacon details are scoped under cTRNG. No code-level breaking changes.
+
 ## [0.1.0] - 2026-02-24
 
 ### Breaking Changes

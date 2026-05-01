@@ -44,28 +44,37 @@ import { createDefaultStorage } from "./storage";
 import { sanitizeConfig } from "./utils/validation";
 
 /**
- * Main Orbitport SDK class
+ * Main Orbitport SDK class.
+ *
+ * Single facade over every Orbitport product. Each product is a peer
+ * namespace under the same client: `sdk.ctrng`, `sdk.kms`, etc. They share
+ * configuration, authentication, and the `OrbitportSDKError` model.
  *
  * @example
  * ```typescript
  * import { OrbitportSDK } from '@spacecomputer/orbitport-sdk';
  *
- * // With API credentials (tries API first, falls back to IPFS)
  * const sdk = new OrbitportSDK({
  *   config: {
  *     clientId: 'your-client-id',
- *     clientSecret: 'your-client-secret'
- *   }
+ *     clientSecret: 'your-client-secret',
+ *   },
  * });
  *
- * // Without API credentials (uses IPFS only)
- * const sdk = new OrbitportSDK({
- *   config: {}
- * });
+ * // cTRNG — cosmic randomness
+ * const random = await sdk.ctrng.random();
  *
- * // Generate random data (always reads from both IPFS sources and compares)
- * const result = await sdk.ctrng.random();
- * console.log(result.data);
+ * // KMS — create a key and sign with it
+ * const key = await sdk.kms.createKey({
+ *   alias: 'demo',
+ *   keySpec: 'ECDSA_P256',
+ *   keyUsage: 'SIGN_VERIFY',
+ * });
+ * const sig = await sdk.kms.sign({
+ *   keyId: key.data.KeyMetadata.KeyId,
+ *   message: 'hello orbitport',
+ *   signingAlgorithm: 'ECDSA_SHA_256',
+ * });
  * ```
  */
 export class OrbitportSDK {
