@@ -36,8 +36,8 @@
     "pack:dry-run": "npm pack --dry-run",
     "publish:dry-run": "npm publish --dry-run",
     "docs": "npm run build && typedoc src/index.ts --out docs --theme default",
-    "examples": "npm run build && npx ts-node examples/basic-usage.ts",
-    "examples:kms": "npm run build && npx ts-node examples/kms-usage.ts"
+    "examples:ctrng": "npm run build && npx ts-node examples/ctrng.ts",
+    "examples:kms": "npm run build && npx ts-node examples/kms.ts"
   },
   "repository": {
     "type": "git",

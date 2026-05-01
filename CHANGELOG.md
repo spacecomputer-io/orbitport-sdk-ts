@@ -11,7 +11,8 @@ All notable changes to this project will be documented in this file.
 - Shared JSON-RPC 2.0 transport (`src/utils/jsonrpc.ts`) with HTTP and JSON-RPC error mapping; raw RPC code preserved in `error.details.jsonRpcCode`.
 - Base64 helpers exported from the SDK: `toBase64`, `fromBase64ToUtf8`, `fromBase64ToUint8Array`.
 - New error codes: `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`.
-- `examples/kms-usage.ts` and `pnpm run examples:kms` script.
+- `examples/kms.ts` and `pnpm run examples:kms` script.
+- Renamed `examples/basic-usage.ts` to `examples/ctrng.ts`; the corresponding script is `pnpm run examples:ctrng`.
 
 ## [0.1.0] - 2026-02-24
 

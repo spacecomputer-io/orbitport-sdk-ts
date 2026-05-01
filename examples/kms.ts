@@ -1,11 +1,9 @@
-// To run this example, first build the SDK from the root directory:
-//   $ pnpm build
-// Then run with ts-node:
-//   $ ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
-//     npx ts-node examples/kms-usage.ts
+// KMS (Key Management Service) usage examples.
 //
-// If your gateway is op-dev rather than op-prod, also set:
-//   $ ORBITPORT_API_URL=https://op-dev.spacecomputer.io
+// Build the SDK first, then run this file with ts-node:
+//   $ pnpm build
+//   $ ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
+//       npx ts-node examples/kms.ts
 
 import { OrbitportSDK, fromBase64ToUint8Array } from "../dist/index";
 
@@ -14,7 +12,6 @@ async function main() {
 
   const clientId = process.env.ORBITPORT_CLIENT_ID;
   const clientSecret = process.env.ORBITPORT_CLIENT_SECRET;
-  const apiUrl = process.env.ORBITPORT_API_URL;
 
   if (!clientId || !clientSecret) {
     console.log(
@@ -24,7 +21,7 @@ async function main() {
   }
 
   const sdk = new OrbitportSDK({
-    config: { clientId, clientSecret, ...(apiUrl ? { apiUrl } : {}) },
+    config: { clientId, clientSecret },
   });
 
   const stamp = Date.now();

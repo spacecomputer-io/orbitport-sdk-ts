@@ -259,7 +259,7 @@ Possible error codes (in addition to the standard SDK codes): `KMS_ERROR`, `KMS_
 
 ### Example
 
-A full walkthrough lives in [`examples/kms-usage.ts`](examples/kms-usage.ts). Run it with:
+A full walkthrough lives in [`examples/kms.ts`](examples/kms.ts). Run it with:
 
 ```bash
 ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
