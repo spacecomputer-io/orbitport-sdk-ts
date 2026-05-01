@@ -184,8 +184,8 @@ export class OrbitportSDK {
    * Key Management Service (KMS)
    *
    * Talks JSON-RPC 2.0 to the gateway at `/api/v1/rpc`. Requires API
-   * credentials — there is no IPFS fallback. Inputs are camelCase; outputs
-   * preserve the PascalCase wire shape.
+   * credentials. Inputs are camelCase; outputs preserve the PascalCase
+   * wire shape.
    *
    * @example
    * ```typescript

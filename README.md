@@ -175,7 +175,7 @@ try {
 
 ## Key Management Service (`sdk.kms`)
 
-The KMS service talks JSON-RPC 2.0 to the Orbitport gateway at `POST /api/v1/rpc`. **It requires API credentials** — there is no IPFS fallback. Inputs are camelCase; outputs preserve the gateway's PascalCase wire shape so server documentation can be grepped directly.
+The KMS service talks JSON-RPC 2.0 to the Orbitport gateway at `POST /api/v1/rpc`. It requires API credentials. Inputs are camelCase; outputs preserve the gateway's PascalCase wire shape so server documentation can be grepped directly.
 
 ```typescript
 import { OrbitportSDK } from "@spacecomputer/orbitport-sdk";
@@ -212,7 +212,7 @@ console.log(dec.data.Plaintext); // "hello kms"
 | `sign({ keyId, message, signingAlgorithm, messageType? })` | Sign a message or precomputed digest. |
 | `generateDataKey({ keyId, dataKeySpec? \| numberOfBytes? })` | Envelope encryption helper — returns a fresh data key, both as plaintext and wrapped under `keyId`. |
 | `rotateKey({ keyId })` | Rotate the key's primary version. |
-| `getCapabilities()` | Discover supported schemes / algorithms (falls back to a static list when the gateway lacks this method). |
+| `getCapabilities()` | Discover supported schemes and algorithms. |
 
 All methods return `Promise<ServiceResult<T>>` with `T` shaped to match the wire response.
 
@@ -256,10 +256,6 @@ Keys created with `scheme: "ETHEREUM"` (and `keySpec: "ECC_SECG_P256K1"`) expose
 KMS methods do **not** retry by default — `CreateKey` and `Sign` are not idempotent. Pass `RequestOptions.retries` per call when you want retry behavior.
 
 Possible error codes (in addition to the standard SDK codes): `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`. Errors raised from the JSON-RPC layer expose the raw RPC code in `error.details.jsonRpcCode` for advanced branching.
-
-### Gateway availability
-
-If your gateway returns `404` for `/api/v1/rpc` (e.g. older op-prod builds), set `apiUrl` in the SDK config to a gateway that has KMS deployed (such as `https://op-dev.spacecomputer.io`).
 
 ### Example
 

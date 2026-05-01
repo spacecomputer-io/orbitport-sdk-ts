@@ -567,25 +567,18 @@ describe("Orbitport SDK E2E Tests", () => {
   });
 
   describe("KMS Service", () => {
-    if (process.env.ORBITPORT_KMS_ENABLED !== "true") {
-      console.warn(
-        "Skipping KMS E2E tests: set ORBITPORT_KMS_ENABLED=true to enable (op-prod may not have KMS deployed)"
-      );
-      return;
-    }
-
     const stamp = Date.now();
     let transitKeyId: string | undefined;
     let ethereumKeyId: string | undefined;
 
-    it("getCapabilities returns TRANSIT and ETHEREUM", async () => {
+    it("lists supported schemes (TRANSIT and ETHEREUM) from getCapabilities", async () => {
       const res = await sdk.kms.getCapabilities();
       expect(res.success).toBe(true);
       const schemes = res.data.Schemes.map((s) => s.Scheme);
       expect(schemes).toEqual(expect.arrayContaining(["TRANSIT", "ETHEREUM"]));
     });
 
-    it("TRANSIT lifecycle: createKey → encrypt → decrypt", async () => {
+    it("creates an AES key, encrypts a message, and decrypts it back", async () => {
       const created = await sdk.kms.createKey({
         alias: `sdk-e2e-${stamp}-aes`,
         keySpec: "AES_256_GCM96",
@@ -608,7 +601,7 @@ describe("Orbitport SDK E2E Tests", () => {
       expect(dec.data.Plaintext).toBe("hello");
     });
 
-    it("decrypt with encoding 'bytes' preserves binary fidelity", async () => {
+    it("encrypts and decrypts raw bytes losslessly when encoding is 'bytes'", async () => {
       // Reuse the TRANSIT key from the previous test if present.
       let keyId = transitKeyId;
       if (!keyId) {
@@ -634,7 +627,7 @@ describe("Orbitport SDK E2E Tests", () => {
       expect(dec.data.Plaintext).toEqual(bytes);
     });
 
-    it("ECDSA_P256 sign with DIGEST messageType returns base64 signature", async () => {
+    it("signs a precomputed digest with an ECDSA_P256 key", async () => {
       const created = await sdk.kms.createKey({
         alias: `sdk-e2e-${stamp}-ecdsa`,
         keySpec: "ECDSA_P256",
@@ -655,7 +648,7 @@ describe("Orbitport SDK E2E Tests", () => {
       expect(sig.data.Signature.length).toBeGreaterThan(0);
     });
 
-    it("ETHEREUM key exposes Address and signs EIP191", async () => {
+    it("creates an Ethereum key with an Address and signs an EIP-191 message", async () => {
       const created = await sdk.kms.createKey({
         alias: `sdk-e2e-${stamp}-eth`,
         keySpec: "ECC_SECG_P256K1",
@@ -677,7 +670,7 @@ describe("Orbitport SDK E2E Tests", () => {
       expect(sig.data.Signature.length).toBeGreaterThan(0);
     });
 
-    it("generateDataKey returns Plaintext + CiphertextBlob (raw base64)", async () => {
+    it("generates a data key returning both plaintext and wrapped ciphertext", async () => {
       let keyId = transitKeyId;
       if (!keyId) {
         const created = await sdk.kms.createKey({
@@ -696,7 +689,7 @@ describe("Orbitport SDK E2E Tests", () => {
       expect(dk.data.CiphertextBlob.length).toBeGreaterThan(0);
     });
 
-    it("rotateKey increments PrimaryVersion", async () => {
+    it("rotates a key and bumps its PrimaryVersion", async () => {
       let keyId = transitKeyId;
       if (!keyId) {
         const created = await sdk.kms.createKey({

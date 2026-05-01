@@ -48,7 +48,7 @@ function lastBody(): { jsonrpc: string; id: number; method: string; params: unkn
 describe('KMSService — auth gating', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('throws AUTH_FAILED synchronously when credentials missing (no fetch)', async () => {
+  it('rejects requests with AUTH_FAILED when credentials are missing and never calls fetch', async () => {
     const { svc } = makeService({
       config: { apiUrl: 'https://api.example.com' },
       token: null,
@@ -59,7 +59,7 @@ describe('KMSService — auth gating', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('throws AUTH_FAILED when token factory returns null', async () => {
+  it('rejects requests with AUTH_FAILED when the token factory returns null', async () => {
     const { svc } = makeService({ token: null });
     await expect(
       svc.createKey({ alias: 'k', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
@@ -71,7 +71,7 @@ describe('KMSService — auth gating', () => {
 describe('KMSService — createKey', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('sends a JSON-RPC 2.0 envelope with PascalCase params', async () => {
+  it('creates a key by sending a JSON-RPC 2.0 envelope with PascalCase params', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({
         KeyMetadata: {
@@ -114,7 +114,7 @@ describe('KMSService — createKey', () => {
     expect(res.data.KeyMetadata.KeyId).toBe('k1');
   });
 
-  it('uses monotonic ids for sequential calls', async () => {
+  it('uses monotonically increasing JSON-RPC ids across sequential calls', async () => {
     (fetch as jest.Mock)
       .mockResolvedValueOnce(rpcOk({ Schemes: [] }))
       .mockResolvedValueOnce(rpcOk({ Schemes: [] }));
@@ -127,7 +127,7 @@ describe('KMSService — createKey', () => {
     expect(ids[1]).toBeGreaterThan(ids[0]);
   });
 
-  it('rejects alias with spaces or kms: prefix', async () => {
+  it('rejects aliases with spaces or the reserved kms: prefix', async () => {
     const { svc } = makeService();
     await expect(
       svc.createKey({ alias: 'has space', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
@@ -142,7 +142,7 @@ describe('KMSService — createKey', () => {
 describe('KMSService — encrypt', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('default encoding "utf8" base64-encodes a UTF-8 string', async () => {
+  it('base64-encodes a UTF-8 string plaintext using the default encoding', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({ CiphertextBlob: 'X', KeyId: 'k1', EncryptionAlgorithm: 'AES_256_GCM96' }),
     );
@@ -155,7 +155,7 @@ describe('KMSService — encrypt', () => {
     expect(fromBase64ToUtf8(params.Plaintext)).toBe('hello — 🚀');
   });
 
-  it('encoding "bytes" base64-encodes raw Uint8Array', async () => {
+  it('base64-encodes raw bytes when encoding is "bytes"', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({ CiphertextBlob: 'X', KeyId: 'k1', EncryptionAlgorithm: 'AES_256_GCM96' }),
     );
@@ -167,7 +167,7 @@ describe('KMSService — encrypt', () => {
     expect(fromBase64ToUint8Array(params.Plaintext)).toEqual(bytes);
   });
 
-  it('rejects encoding "bytes" with string plaintext', async () => {
+  it('rejects encoding "bytes" when the plaintext is a string', async () => {
     const { svc } = makeService();
     await expect(
       // @ts-expect-error mismatched encoding/plaintext on purpose
@@ -180,7 +180,7 @@ describe('KMSService — encrypt', () => {
 describe('KMSService — decrypt', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('default encoding "utf8" returns a UTF-8 string Plaintext', async () => {
+  it('returns Plaintext as a UTF-8 string under the default encoding', async () => {
     const text = 'hello — 🚀';
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({
@@ -195,7 +195,7 @@ describe('KMSService — decrypt', () => {
     expect(res.data.Plaintext).toBe(text);
   });
 
-  it('encoding "bytes" returns Uint8Array Plaintext (lossless)', async () => {
+  it('returns Plaintext as a Uint8Array (lossless) when encoding is "bytes"', async () => {
     const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x80, 0xff]);
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({
@@ -214,7 +214,7 @@ describe('KMSService — decrypt', () => {
     expect(res.data.Plaintext).toEqual(bytes);
   });
 
-  it('round-trips encrypt → decrypt over mocked transport', async () => {
+  it('encrypts and decrypts a string round-trip over a mocked transport', async () => {
     const original = 'round-trip 🌌';
     (fetch as jest.Mock)
       .mockImplementationOnce(async (_url, init) => {
@@ -249,7 +249,7 @@ describe('KMSService — decrypt', () => {
 describe('KMSService — sign', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('defaults MessageType to "RAW" and base64-encodes the message', async () => {
+  it('signs a message with default messageType "RAW" and base64-encodes the message', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({ KeyId: 'k1', Signature: 'sig', SigningAlgorithm: 'ECDSA_SHA_256' }),
     );
@@ -261,7 +261,7 @@ describe('KMSService — sign', () => {
     expect(fromBase64ToUtf8(params.Message)).toBe('hi');
   });
 
-  it('rejects EIP191 with non-ETHEREUM signing algorithm (no fetch)', async () => {
+  it('rejects messageType "EIP191" when paired with a non-Ethereum signing algorithm', async () => {
     const { svc } = makeService();
     await expect(
       svc.sign({
@@ -278,21 +278,21 @@ describe('KMSService — sign', () => {
 describe('KMSService — generateDataKey', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('rejects when both dataKeySpec and numberOfBytes are set', async () => {
+  it('rejects requests that pass both dataKeySpec and numberOfBytes', async () => {
     const { svc } = makeService();
     await expect(
       svc.generateDataKey({ keyId: 'k1', dataKeySpec: 'AES_256', numberOfBytes: 32 }),
     ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
   });
 
-  it('rejects when neither is set', async () => {
+  it('rejects requests that omit both dataKeySpec and numberOfBytes', async () => {
     const { svc } = makeService();
     await expect(svc.generateDataKey({ keyId: 'k1' })).rejects.toMatchObject({
       code: ERROR_CODES.VALIDATION_ERROR,
     });
   });
 
-  it('returns Plaintext as raw base64 (binary key material, no auto-decode)', async () => {
+  it('returns Plaintext as raw base64 (binary key material is not auto-decoded)', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({ KeyId: 'k1', Plaintext: 'AAECAwQF', CiphertextBlob: 'CIPH' }),
     );
@@ -306,7 +306,7 @@ describe('KMSService — generateDataKey', () => {
 describe('KMSService — rotateKey + getCapabilities', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('rotateKey passes through wire response', async () => {
+  it('rotates a key and returns the gateway response unchanged', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({
         KeyMetadata: {
@@ -328,7 +328,7 @@ describe('KMSService — rotateKey + getCapabilities', () => {
     expect(res.data.KeyMetadata.PrimaryVersion).toBe(2);
   });
 
-  it('getCapabilities returns wire result on success', async () => {
+  it('returns the gateway capabilities response from getCapabilities', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcOk({
         Schemes: [
@@ -352,28 +352,7 @@ describe('KMSService — rotateKey + getCapabilities', () => {
     expect(res.data.Schemes[0].Scheme).toBe('TRANSIT');
   });
 
-  it('getCapabilities falls back to STATIC_CAPABILITIES on -32601', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
-      rpcErr({ code: -32601, message: 'method not found' }),
-    );
-    const { svc } = makeService();
-    const res = await svc.getCapabilities();
-    expect(res.data.Schemes.map((s) => s.Scheme).sort()).toEqual([
-      'ETHEREUM',
-      'TRANSIT',
-    ]);
-  });
-
-  it('getCapabilities falls back when message matches /unknown variant/', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
-      rpcErr({ code: -32603, message: 'unknown variant kms.GetCapabilities' }),
-    );
-    const { svc } = makeService();
-    const res = await svc.getCapabilities();
-    expect(res.data.Schemes.length).toBeGreaterThan(0);
-  });
-
-  it('getCapabilities surfaces non-method-not-found errors', async () => {
+  it('surfaces JSON-RPC errors from getCapabilities as OrbitportSDKError', async () => {
     (fetch as jest.Mock).mockResolvedValueOnce(
       rpcErr({ code: -32603, message: 'internal' }),
     );

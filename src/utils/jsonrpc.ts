@@ -3,8 +3,7 @@
  *
  * Pure transport — takes a token (not a getToken callback). Maps HTTP and
  * JSON-RPC error codes to typed OrbitportSDKError instances and preserves the
- * raw RPC code in `error.details.jsonRpcCode` so service layers can branch
- * (e.g., KMS getCapabilities falls back to a static list on -32601).
+ * raw RPC code in `error.details.jsonRpcCode` for advanced branching.
  */
 
 import { OrbitportSDKError, ERROR_CODES, createNetworkError } from './errors';
@@ -168,7 +167,7 @@ function mapHttpError(status: number, url: string): OrbitportSDKError {
   }
   if (status === 404) {
     return new OrbitportSDKError(
-      `KMS JSON-RPC route not deployed at ${url}`,
+      `JSON-RPC endpoint not found at ${url}`,
       ERROR_CODES.API_ERROR,
       status,
     );
@@ -197,8 +196,8 @@ function mapHttpError(status: number, url: string): OrbitportSDKError {
 /**
  * Maps a JSON-RPC error payload to an OrbitportSDKError.
  *
- * Always preserves the raw RPC code in `error.details.jsonRpcCode` so service
- * layers can branch (e.g., -32601 → static capabilities fallback).
+ * Preserves the raw RPC code in `error.details.jsonRpcCode` for advanced
+ * branching by callers.
  */
 export function mapJsonRpcError(err: JsonRpcErrorPayload): OrbitportSDKError {
   let code: ErrorCode = ERROR_CODES.JSON_RPC_ERROR;

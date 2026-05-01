@@ -2,7 +2,6 @@
  * Key Management Service (KMS) — JSON-RPC 2.0 client.
  *
  * Mirrors the CTRNGService construction shape (config + token factory).
- * Unlike CTRNG, KMS requires authentication — no IPFS fallback.
  */
 
 import type {
@@ -24,7 +23,6 @@ import type {
   RotateKeyRequest,
   RotateKeyResponse,
   GetCapabilitiesResponse,
-  SchemeCapability,
 } from '../types';
 import { OrbitportSDKError, ERROR_CODES } from '../utils/errors';
 import { jsonRpcCall } from '../utils/jsonrpc';
@@ -41,58 +39,6 @@ import {
   sanitizeGenerateDataKeyRequest,
   sanitizeRotateKeyRequest,
 } from '../utils/validation';
-
-/**
- * Static capability list — used as fallback when the gateway returns
- * `-32601` for `kms.GetCapabilities` (older op-dev builds expose KMS without
- * the introspection method). Matches the kms_starter reference client.
- */
-const STATIC_CAPABILITIES: SchemeCapability[] = [
-  {
-    Scheme: 'TRANSIT',
-    KeySpecs: [
-      'AES_256_GCM96',
-      'ECDSA_P256',
-      'ECDSA_P384',
-      'ED25519',
-      'RSA_4096',
-    ],
-    KeyUsages: ['ENCRYPT_DECRYPT', 'SIGN_VERIFY'],
-    EncryptionAlgorithms: ['AES_256_GCM96'],
-    DataKeySpecs: ['AES_128', 'AES_256'],
-    SigningCapabilities: [
-      { SigningAlgorithm: 'ECDSA_SHA_256', MessageTypes: ['RAW', 'DIGEST'] },
-      { SigningAlgorithm: 'ECDSA_SHA_384', MessageTypes: ['RAW', 'DIGEST'] },
-      { SigningAlgorithm: 'ED25519', MessageTypes: ['RAW'] },
-      {
-        SigningAlgorithm: 'RSASSA_PKCS1_V1_5_SHA_256',
-        MessageTypes: ['RAW', 'DIGEST'],
-      },
-      { SigningAlgorithm: 'RSASSA_PSS_SHA_256', MessageTypes: ['RAW', 'DIGEST'] },
-    ],
-    SupportsEncrypt: true,
-    SupportsDecrypt: true,
-    SupportsGenerateDataKey: true,
-    SupportsRotateKey: true,
-  },
-  {
-    Scheme: 'ETHEREUM',
-    KeySpecs: ['ECC_SECG_P256K1'],
-    KeyUsages: ['SIGN_VERIFY'],
-    EncryptionAlgorithms: [],
-    DataKeySpecs: [],
-    SigningCapabilities: [
-      {
-        SigningAlgorithm: 'ETHEREUM_SECP256K1',
-        MessageTypes: ['RAW', 'DIGEST', 'EIP191'],
-      },
-    ],
-    SupportsEncrypt: false,
-    SupportsDecrypt: false,
-    SupportsGenerateDataKey: false,
-    SupportsRotateKey: true,
-  },
-];
 
 export class KMSService {
   private config: OrbitportConfig;
@@ -208,27 +154,11 @@ export class KMSService {
   async getCapabilities(
     options: RequestOptions = {},
   ): Promise<ServiceResult<GetCapabilitiesResponse>> {
-    try {
-      return await this._call<GetCapabilitiesResponse>(
-        'kms.GetCapabilities',
-        {},
-        options,
-      );
-    } catch (error) {
-      if (this._isMethodNotFound(error)) {
-        if (this.debug) {
-          console.log(
-            '[OrbitportSDK] kms.GetCapabilities not available; returning static capabilities',
-          );
-        }
-        return {
-          data: { Schemes: STATIC_CAPABILITIES },
-          metadata: { timestamp: Date.now() },
-          success: true,
-        };
-      }
-      throw error;
-    }
+    return this._call<GetCapabilitiesResponse>(
+      'kms.GetCapabilities',
+      {},
+      options,
+    );
   }
 
   /**
@@ -280,12 +210,5 @@ export class KMSService {
     );
 
     return { result, metadata: { timestamp: Date.now() } };
-  }
-
-  private _isMethodNotFound(error: unknown): boolean {
-    if (!(error instanceof OrbitportSDKError)) return false;
-    const details = error.details as { jsonRpcCode?: number } | undefined;
-    if (details?.jsonRpcCode === -32601) return true;
-    return /unknown variant.*kms\.GetCapabilities/i.test(error.message);
   }
 }
