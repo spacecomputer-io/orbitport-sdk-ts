@@ -119,8 +119,30 @@ export async function jsonRpcCall<TResult, TParams = Record<string, unknown>>(
       );
     }
 
-    if ('error' in body && body.error) {
-      throw mapJsonRpcError(body.error);
+    // JSON-RPC 2.0 invariant: `jsonrpc` must be the literal string "2.0".
+    if (!body || typeof body !== 'object' || (body as { jsonrpc?: unknown }).jsonrpc !== '2.0') {
+      throw new OrbitportSDKError(
+        'Invalid JSON-RPC response: missing or wrong "jsonrpc" version',
+        ERROR_CODES.INVALID_RESPONSE,
+        response.status,
+      );
+    }
+
+    // Match the response id to our envelope id so a proxy/cache can't replay
+    // a stale response. Error responses are allowed to carry id=null (server
+    // failed to parse the request and couldn't echo our id back).
+    const responseId = (body as { id: number | null }).id;
+    const isErrorBody = 'error' in body && body.error;
+    if (responseId !== envelope.id && !(isErrorBody && responseId === null)) {
+      throw new OrbitportSDKError(
+        `Invalid JSON-RPC response: id mismatch (expected ${envelope.id}, got ${String(responseId)})`,
+        ERROR_CODES.INVALID_RESPONSE,
+        response.status,
+      );
+    }
+
+    if (isErrorBody) {
+      throw mapJsonRpcError((body as JsonRpcErrorResponse).error);
     }
 
     if (!('result' in body)) {

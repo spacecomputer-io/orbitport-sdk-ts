@@ -36,10 +36,16 @@ export function fromBase64ToUtf8(b64: string): string {
   return new TextDecoder('utf-8').decode(fromBase64ToUint8Array(b64));
 }
 
+// Encode in fixed-size chunks: avoids quadratic-time `binary += char` and
+// also dodges call-stack limits on `String.fromCharCode(...largeArray)`.
+const BASE64_CHUNK = 0x8000; // 32 KiB
+
 function uint8ArrayToBase64Browser(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  if (bytes.length === 0) return '';
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK) {
+    const slice = bytes.subarray(i, i + BASE64_CHUNK);
+    parts.push(String.fromCharCode.apply(null, slice as unknown as number[]));
   }
-  return btoa(binary);
+  return btoa(parts.join(''));
 }

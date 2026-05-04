@@ -16,7 +16,7 @@ npm i @spacecomputer-io/orbitport-sdk-ts
 ## Quick Start
 
 ```typescript
-import { OrbitportSDK } from "@spacecomputer/orbitport-sdk";
+import { OrbitportSDK } from "@spacecomputer-io/orbitport-sdk-ts";
 
 const sdk = new OrbitportSDK({
   config: {
@@ -211,7 +211,7 @@ pnpm run examples:ctrng
 The KMS service talks JSON-RPC 2.0 to the Orbitport gateway at `POST /api/v1/rpc`. It requires API credentials. Inputs are camelCase; outputs preserve the gateway's PascalCase wire shape so server documentation can be grepped directly.
 
 ```typescript
-import { OrbitportSDK } from "@spacecomputer/orbitport-sdk";
+import { OrbitportSDK } from "@spacecomputer-io/orbitport-sdk-ts";
 
 const sdk = new OrbitportSDK({
   config: { clientId: "...", clientSecret: "..." },
@@ -273,7 +273,7 @@ const decBytes = await sdk.kms.decrypt({
 `generateDataKey` returns `Plaintext` as raw base64 (binary key material — no `encoding` flag). Use the exported helpers to decode manually when needed:
 
 ```typescript
-import { fromBase64ToUint8Array } from "@spacecomputer/orbitport-sdk";
+import { fromBase64ToUint8Array } from "@spacecomputer-io/orbitport-sdk-ts";
 const dk = await sdk.kms.generateDataKey({ keyId, dataKeySpec: "AES_256" });
 const rawBytes = fromBase64ToUint8Array(dk.data.Plaintext);
 ```
@@ -314,7 +314,7 @@ await sdk.auth.clearToken();
 Every product throws `OrbitportSDKError` with a typed `code` from `ERROR_CODES`. KMS additionally exposes the raw JSON-RPC error code via `error.details.jsonRpcCode`.
 
 ```typescript
-import { OrbitportSDKError, ERROR_CODES } from "@spacecomputer/orbitport-sdk";
+import { OrbitportSDKError, ERROR_CODES } from "@spacecomputer-io/orbitport-sdk-ts";
 
 try {
   await sdk.ctrng.random();

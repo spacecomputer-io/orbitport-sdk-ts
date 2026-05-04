@@ -52,7 +52,7 @@ import { sanitizeConfig } from "./utils/validation";
  *
  * @example
  * ```typescript
- * import { OrbitportSDK } from '@spacecomputer/orbitport-sdk';
+ * import { OrbitportSDK } from '@spacecomputer-io/orbitport-sdk-ts';
  *
  * const sdk = new OrbitportSDK({
  *   config: {
@@ -378,7 +378,7 @@ export class OrbitportSDK {
  *
  * @example
  * ```typescript
- * import { createOrbitportSDK } from '@spacecomputer/orbitport-sdk';
+ * import { createOrbitportSDK } from '@spacecomputer-io/orbitport-sdk-ts';
  *
  * const sdk = createOrbitportSDK({
  *   clientId: 'your-client-id',

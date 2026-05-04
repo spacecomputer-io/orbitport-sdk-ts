@@ -16,20 +16,40 @@ const baseConfig: OrbitportConfig = {
   timeout: 30000,
 };
 
-function rpcOk(result: unknown, id = 1) {
-  return {
+// Mock-fetch helpers. The transport now validates that the JSON-RPC response
+// id matches the request id, so these helpers echo the inbound id by default
+// and only fall back to a literal when called outside an `mockImplementation`.
+function rpcOk(result: unknown) {
+  return (_url: string, init?: RequestInit) => ({
     ok: true,
     status: 200,
-    json: async () => ({ jsonrpc: '2.0', id, result }),
-  } as unknown as Response;
+    json: async () => ({
+      jsonrpc: '2.0',
+      id: requestIdFrom(init),
+      result,
+    }),
+  } as unknown as Response);
 }
 
-function rpcErr(error: { code: number; message: string }, id = 1) {
-  return {
+function rpcErr(error: { code: number; message: string }) {
+  return (_url: string, init?: RequestInit) => ({
     ok: true,
     status: 200,
-    json: async () => ({ jsonrpc: '2.0', id, error }),
-  } as unknown as Response;
+    json: async () => ({
+      jsonrpc: '2.0',
+      id: requestIdFrom(init),
+      error,
+    }),
+  } as unknown as Response);
+}
+
+function requestIdFrom(init: RequestInit | undefined): number {
+  if (!init?.body) return 0;
+  try {
+    return JSON.parse(init.body as string).id as number;
+  } catch {
+    return 0;
+  }
 }
 
 function makeService(opts?: { config?: OrbitportConfig; token?: string | null }) {
@@ -68,11 +88,56 @@ describe('KMSService — auth gating', () => {
   });
 });
 
+describe('KMSService — retries (opt-in via RequestOptions.retries)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('does not retry when retries is unset (single attempt)', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(() => {
+      return Promise.resolve({
+        ok: false,
+        status: 503,
+        json: async () => ({}),
+      } as unknown as Response);
+    });
+    const { svc } = makeService();
+    await expect(svc.getCapabilities()).rejects.toBeInstanceOf(OrbitportSDKError);
+    expect((fetch as jest.Mock).mock.calls.length).toBe(1);
+  });
+
+  it('retries transient failures up to retries attempts and ultimately succeeds', async () => {
+    (fetch as jest.Mock)
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: false,
+          status: 503,
+          json: async () => ({}),
+        } as unknown as Response),
+      )
+      .mockImplementationOnce(rpcOk({ Schemes: [{ Scheme: 'TRANSIT' }] }));
+
+    const { svc } = makeService();
+    const res = await svc.getCapabilities({ retries: 2 });
+    expect((fetch as jest.Mock).mock.calls.length).toBe(2);
+    expect(res.data.Schemes[0].Scheme).toBe('TRANSIT');
+  });
+
+  it('does not retry validation errors even when retries > 1', async () => {
+    const { svc } = makeService();
+    await expect(
+      svc.createKey(
+        { alias: 'has space', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' },
+        { retries: 5 },
+      ),
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
 describe('KMSService — createKey', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('creates a key by sending a JSON-RPC 2.0 envelope with PascalCase params', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({
         KeyMetadata: {
           KeyId: 'k1',
@@ -116,8 +181,8 @@ describe('KMSService — createKey', () => {
 
   it('uses monotonically increasing JSON-RPC ids across sequential calls', async () => {
     (fetch as jest.Mock)
-      .mockResolvedValueOnce(rpcOk({ Schemes: [] }))
-      .mockResolvedValueOnce(rpcOk({ Schemes: [] }));
+      .mockImplementationOnce(rpcOk({ Schemes: [] }))
+      .mockImplementationOnce(rpcOk({ Schemes: [] }));
     const { svc } = makeService();
     await svc.getCapabilities();
     await svc.getCapabilities();
@@ -143,7 +208,7 @@ describe('KMSService — encrypt', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('base64-encodes a UTF-8 string plaintext using the default encoding', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({ CiphertextBlob: 'X', KeyId: 'k1', EncryptionAlgorithm: 'AES_256_GCM96' }),
     );
     const { svc } = makeService();
@@ -156,7 +221,7 @@ describe('KMSService — encrypt', () => {
   });
 
   it('base64-encodes raw bytes when encoding is "bytes"', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({ CiphertextBlob: 'X', KeyId: 'k1', EncryptionAlgorithm: 'AES_256_GCM96' }),
     );
     const { svc } = makeService();
@@ -182,7 +247,7 @@ describe('KMSService — decrypt', () => {
 
   it('returns Plaintext as a UTF-8 string under the default encoding', async () => {
     const text = 'hello — 🚀';
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({
         Plaintext: toBase64(text),
         KeyId: 'k1',
@@ -197,7 +262,7 @@ describe('KMSService — decrypt', () => {
 
   it('returns Plaintext as a Uint8Array (lossless) when encoding is "bytes"', async () => {
     const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x80, 0xff]);
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({
         Plaintext: toBase64(bytes),
         KeyId: 'k1',
@@ -217,23 +282,23 @@ describe('KMSService — decrypt', () => {
   it('encrypts and decrypts a string round-trip over a mocked transport', async () => {
     const original = 'round-trip 🌌';
     (fetch as jest.Mock)
-      .mockImplementationOnce(async (_url, init) => {
+      .mockImplementationOnce((url, init) => {
         const body = JSON.parse((init as RequestInit).body as string);
         const params = body.params as { Plaintext: string };
         return rpcOk({
           CiphertextBlob: params.Plaintext, // echo back as cipher
           KeyId: 'k1',
           EncryptionAlgorithm: 'AES_256_GCM96',
-        });
+        })(url as string, init);
       })
-      .mockImplementationOnce(async (_url, init) => {
+      .mockImplementationOnce((url, init) => {
         const body = JSON.parse((init as RequestInit).body as string);
         const params = body.params as { CiphertextBlob: string };
         return rpcOk({
           Plaintext: params.CiphertextBlob, // echo back as plaintext
           KeyId: 'k1',
           EncryptionAlgorithm: 'AES_256_GCM96',
-        });
+        })(url as string, init);
       });
 
     const { svc } = makeService();
@@ -250,7 +315,7 @@ describe('KMSService — sign', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('signs a message with default messageType "RAW" and base64-encodes the message', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({ KeyId: 'k1', Signature: 'sig', SigningAlgorithm: 'ECDSA_SHA_256' }),
     );
     const { svc } = makeService();
@@ -293,7 +358,7 @@ describe('KMSService — generateDataKey', () => {
   });
 
   it('returns Plaintext as raw base64 (binary key material is not auto-decoded)', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({ KeyId: 'k1', Plaintext: 'AAECAwQF', CiphertextBlob: 'CIPH' }),
     );
     const { svc } = makeService();
@@ -307,7 +372,7 @@ describe('KMSService — rotateKey + getCapabilities', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('rotates a key and returns the gateway response unchanged', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({
         KeyMetadata: {
           KeyId: 'k1',
@@ -329,7 +394,7 @@ describe('KMSService — rotateKey + getCapabilities', () => {
   });
 
   it('returns the gateway capabilities response from getCapabilities', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({
         Schemes: [
           {
@@ -353,7 +418,7 @@ describe('KMSService — rotateKey + getCapabilities', () => {
   });
 
   it('surfaces JSON-RPC errors from getCapabilities as OrbitportSDKError', async () => {
-    (fetch as jest.Mock).mockResolvedValueOnce(
+    (fetch as jest.Mock).mockImplementationOnce(
       rpcErr({ code: -32603, message: 'internal' }),
     );
     const { svc } = makeService();

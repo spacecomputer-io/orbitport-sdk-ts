@@ -26,6 +26,7 @@ import type {
 } from '../types';
 import { OrbitportSDKError, ERROR_CODES } from '../utils/errors';
 import { jsonRpcCall } from '../utils/jsonrpc';
+import { withRetry, RETRY_STRATEGIES } from '../utils/retry';
 import {
   toBase64,
   fromBase64ToUtf8,
@@ -200,14 +201,36 @@ export class KMSService {
       console.log('[OrbitportSDK] KMS', method, '→', url);
     }
 
-    const result = await jsonRpcCall<T>(
-      { url, method, params, token },
-      {
-        timeout,
-        headers: options.headers,
-        debug: this.debug,
-      },
-    );
+    // Retries are opt-in. KMS write methods (CreateKey, Sign, etc.) are not
+    // generally idempotent, so we only retry when the caller explicitly asks
+    // (`options.retries > 1`). The shared retry helper's `isRetryableError`
+    // predicate further restricts retries to transient classes (network,
+    // timeout, 5xx, rate-limited) — never on validation/auth/server errors.
+    const call = () =>
+      jsonRpcCall<T>(
+        { url, method, params, token },
+        {
+          timeout,
+          headers: options.headers,
+          debug: this.debug,
+        },
+      );
+
+    const result =
+      options.retries && options.retries > 1
+        ? await withRetry(
+          call,
+          { ...RETRY_STRATEGIES.standard, maxAttempts: options.retries },
+          (error, attempt) => {
+            if (this.debug) {
+              console.warn(
+                `[OrbitportSDK] KMS ${method} attempt ${attempt} failed:`,
+                error.message,
+              );
+            }
+          },
+        )
+        : await call();
 
     return { result, metadata: { timestamp: Date.now() } };
   }

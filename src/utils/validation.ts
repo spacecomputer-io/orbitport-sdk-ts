@@ -538,6 +538,12 @@ export function sanitizeDecryptRequest(req: DecryptRequest): {
   if (req.keyId !== undefined && typeof req.keyId !== 'string') {
     throw createValidationError('decrypt: keyId must be a string when provided');
   }
+  if (
+    req.encryptionAlgorithm !== undefined &&
+    typeof req.encryptionAlgorithm !== 'string'
+  ) {
+    throw createValidationError('decrypt: encryptionAlgorithm must be a string');
+  }
   const params: Record<string, unknown> = {
     CiphertextBlob: req.ciphertextBlob,
   };
