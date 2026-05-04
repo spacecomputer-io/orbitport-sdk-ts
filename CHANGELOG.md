@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-05-04
+
+Republish of the 0.2.0 release. The 0.2.0 tag never reached the npm registry — every publish attempt 404'd because `actions/setup-node@v4` was configured with `registry-url`, which made it write a placeholder `.npmrc` and export `NODE_AUTH_TOKEN=XXXXX-XXXXX-XXXXX-XXXXX` that pnpm dutifully forwarded to npm. Dropping `registry-url` lets the OIDC trusted-publisher flow take over (see CI workflow change). No SDK behavior change vs 0.2.0.
+
 ## [0.2.0] - 2026-05-01
 
 ### Added
