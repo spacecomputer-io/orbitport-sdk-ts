@@ -19,7 +19,7 @@ import {
   createNetworkError,
 } from '../utils/errors';
 import { sanitizeCTRNGRequest } from '../utils/validation';
-import { BeaconService } from './beacon';
+import { BeaconService } from './ipfs';
 
 /**
  * cTRNG service class

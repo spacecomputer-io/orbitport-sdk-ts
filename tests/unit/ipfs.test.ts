@@ -2,7 +2,7 @@
  * Unit tests for IPFSService
  */
 
-import { BeaconService } from "../../src/services/beacon";
+import { BeaconService } from "../../src/services/ipfs";
 import { BeaconComparison } from "../../src/types";
 
 // No need to mock ipfs-http-client since we're using direct HTTP calls

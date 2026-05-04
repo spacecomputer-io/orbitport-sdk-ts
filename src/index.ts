@@ -38,7 +38,7 @@ import type {
 } from "./types";
 import { AuthService } from "./services/auth";
 import { CTRNGService } from "./services/ctrng";
-import { BeaconService } from "./services/beacon";
+import { BeaconService } from "./services/ipfs";
 import { KMSService } from "./services/kms";
 import { createDefaultStorage } from "./storage";
 import { sanitizeConfig } from "./utils/validation";
