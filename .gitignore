@@ -71,6 +71,9 @@ jspm_packages/
 # Output of 'npm pack'
 *.tgz
 
+# Local patch files
+*.patch
+
 # Yarn Integrity file
 .yarn-integrity
 

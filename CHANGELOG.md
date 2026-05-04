@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-05-01
+
+### Added
+
+- `sdk.kms` Key Management Service — new methods: `createKey`, `encrypt`, `decrypt`, `sign`, `generateDataKey`, `rotateKey`, `getCapabilities`. Talks JSON-RPC 2.0 at `POST /api/v1/rpc`. Supports TRANSIT and ETHEREUM schemes.
+- `encoding: "utf8" | "bytes"` option on `kms.encrypt` / `kms.decrypt` — default `"utf8"` keeps auto-decoding to string; pass `"bytes"` for lossless binary `Uint8Array`.
+- Shared JSON-RPC 2.0 transport (`src/utils/jsonrpc.ts`) with HTTP and JSON-RPC error mapping; raw RPC code preserved in `error.details.jsonRpcCode`.
+- Base64 helpers exported from the SDK: `toBase64`, `fromBase64ToUtf8`, `fromBase64ToUint8Array`.
+- New error codes: `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`.
+- `examples/kms.ts` and `pnpm run examples:kms` script.
+- Renamed `examples/basic-usage.ts` to `examples/ctrng.ts`; the corresponding script is `pnpm run examples:ctrng`.
+
+### Changed
+
+- README and SDK doc-comments now position the SDK as a multi-product facade. cTRNG and KMS sit as peer products; IPFS beacon details are scoped under cTRNG. No code-level breaking changes.
+
 ## [0.1.0] - 2026-02-24
 
 ### Breaking Changes

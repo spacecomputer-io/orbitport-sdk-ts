@@ -4,6 +4,8 @@
 
 import type { ErrorCode } from '../utils/errors';
 
+export * from './kms';
+
 // Configuration interfaces
 export interface OrbitportConfig {
   clientId?: string;

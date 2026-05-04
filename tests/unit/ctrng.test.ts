@@ -3,11 +3,11 @@
  */
 
 import { CTRNGService } from "../../src/services/ctrng";
-import { BeaconService } from "../../src/services/beacon";
+import { BeaconService } from "../../src/services/ipfs";
 import { OrbitportConfig, IPFSCTRNGRequest } from "../../src/types";
 
 // Mock BeaconService
-jest.mock("../../src/services/beacon");
+jest.mock("../../src/services/ipfs");
 
 // No need to mock ipfs-http-client since we're using direct HTTP calls
 

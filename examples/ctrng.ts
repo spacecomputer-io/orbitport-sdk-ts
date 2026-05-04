@@ -1,16 +1,13 @@
-// To run this example, you might first need to build the SDK from the root directory:
-// $ pnpm build
-// Then, you can run this file using ts-node:
-// $ pnpm add -D ts-node
-// $ npx ts-node examples/basic-usage.ts
+// cTRNG (cosmic True Random Number Generator) usage examples.
+//
+// Build the SDK first, then run this file with ts-node:
+//   $ pnpm build
+//   $ npx ts-node examples/ctrng.ts
 
 import { OrbitportSDK } from "../dist/index";
 
-/**
- * Main function to run the SDK examples.
- */
 async function main() {
-  console.log("--- Orbitport SDK Example ---");
+  console.log("--- Orbitport cTRNG Example ---");
 
   const DEBUG = false;
 

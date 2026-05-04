@@ -71,6 +71,12 @@ export const ERROR_CODES = {
   PROVIDER_UNAVAILABLE: 'PROVIDER_UNAVAILABLE',
   FALLBACK_FAILED: 'FALLBACK_FAILED',
 
+  // KMS / JSON-RPC errors
+  KMS_ERROR: 'KMS_ERROR',
+  KMS_KEY_NOT_FOUND: 'KMS_KEY_NOT_FOUND',
+  KMS_INVALID_KEY_STATE: 'KMS_INVALID_KEY_STATE',
+  JSON_RPC_ERROR: 'JSON_RPC_ERROR',
+
   // Unknown errors
   UNKNOWN_ERROR: 'UNKNOWN_ERROR',
 } as const;
@@ -198,6 +204,14 @@ export function formatErrorMessage(error: OrbitportSDKError): string {
     return 'Service is temporarily unavailable. Please try again later.';
   case ERROR_CODES.INVALID_CONFIG:
     return 'Invalid SDK configuration. Please check your settings.';
+  case ERROR_CODES.KMS_KEY_NOT_FOUND:
+    return 'KMS key not found. Verify the key ID or alias.';
+  case ERROR_CODES.KMS_INVALID_KEY_STATE:
+    return 'KMS key is disabled or pending. Enable the key or wait for it to become active.';
+  case ERROR_CODES.KMS_ERROR:
+    return baseMessage;
+  case ERROR_CODES.JSON_RPC_ERROR:
+    return baseMessage;
   default:
     return baseMessage;
   }
