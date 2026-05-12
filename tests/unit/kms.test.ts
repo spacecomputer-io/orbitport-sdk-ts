@@ -179,6 +179,38 @@ describe('KMSService — createKey', () => {
     expect(res.data.KeyMetadata.KeyId).toBe('k1');
   });
 
+  it('always sends Description and Tags on the wire even when the caller omits them', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(
+      rpcOk({
+        KeyMetadata: {
+          KeyId: 'k2',
+          Description: '',
+          KeySpec: 'AES_256_GCM96',
+          KeyUsage: 'ENCRYPT_DECRYPT',
+          Enabled: true,
+          PrimaryVersion: 1,
+          CreationDate: 'now',
+          Tags: [],
+          Alias: 'demo-2',
+        },
+      }),
+    );
+    const { svc } = makeService();
+    await svc.createKey({
+      alias: 'demo-2',
+      keySpec: 'AES_256_GCM96',
+      keyUsage: 'ENCRYPT_DECRYPT',
+    });
+
+    expect(lastBody().params).toEqual({
+      Alias: 'demo-2',
+      KeySpec: 'AES_256_GCM96',
+      KeyUsage: 'ENCRYPT_DECRYPT',
+      Description: '',
+      Tags: [],
+    });
+  });
+
   it('uses monotonically increasing JSON-RPC ids across sequential calls', async () => {
     (fetch as jest.Mock)
       .mockImplementationOnce(rpcOk({ Schemes: [] }))
@@ -423,5 +455,40 @@ describe('KMSService — rotateKey + getCapabilities', () => {
     );
     const { svc } = makeService();
     await expect(svc.getCapabilities()).rejects.toBeInstanceOf(OrbitportSDKError);
+  });
+});
+
+describe('KMSService — HTTP error bodies', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('includes the plain-text HTTP 400 body in the thrown error message and details', async () => {
+    const gatewayText = 'Request body deserialize error: missing field `Description`';
+    (fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: false,
+        status: 400,
+        text: async () => gatewayText,
+      } as unknown as Response),
+    );
+    const { svc } = makeService();
+    await expect(
+      svc.createKey({ alias: 'demo', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.API_ERROR,
+      status: 400,
+      message: expect.stringContaining(gatewayText),
+      details: { httpBody: gatewayText },
+    });
+  });
+
+  it('still throws a typed error when the HTTP error has no readable body', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve({ ok: false, status: 503, json: async () => ({}) } as unknown as Response),
+    );
+    const { svc } = makeService();
+    await expect(svc.getCapabilities()).rejects.toMatchObject({
+      code: ERROR_CODES.SERVICE_UNAVAILABLE,
+      status: 503,
+    });
   });
 });
