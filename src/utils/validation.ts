@@ -453,14 +453,18 @@ export function sanitizeCreateKeyRequest(req: CreateKeyRequest): Record<string, 
   }
   const tags = sanitizeTags(req.tags);
 
+  // The gateway requires `Description` and `Tags` to be present on the wire
+  // (they are non-`optional` fields in the proto, so JSON deserialization fails
+  // outright when they are absent). They are still optional in the SDK type —
+  // we normalize them to an empty string / empty array here.
   const params: Record<string, unknown> = {
     Alias: req.alias,
     KeySpec: req.keySpec,
     KeyUsage: req.keyUsage,
+    Description: req.description ?? '',
+    Tags: tags ?? [],
   };
   if (req.scheme !== undefined) params.Scheme = req.scheme;
-  if (req.description !== undefined) params.Description = req.description;
-  if (tags !== undefined) params.Tags = tags;
   return params;
 }
 

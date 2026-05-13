@@ -105,7 +105,19 @@ export async function jsonRpcCall<TResult, TParams = Record<string, unknown>>(
     });
 
     if (!response.ok) {
-      throw mapHttpError(response.status, args.url);
+      // Read the response body so callers see the gateway's error text (e.g.
+      // "Request body deserialize error: missing field `Description`"), which
+      // is plain text and never reaches the JSON-RPC error path below.
+      let bodyText = '';
+      try {
+        bodyText = await response.text();
+      } catch {
+        bodyText = '';
+      }
+      if (options.debug && bodyText) {
+        console.log('[OrbitportSDK] JSON-RPC ← HTTP', response.status, bodyText);
+      }
+      throw mapHttpError(response.status, args.url, bodyText);
     }
 
     let body: JsonRpcResponse<TResult>;
@@ -179,39 +191,59 @@ export async function jsonRpcCall<TResult, TParams = Record<string, unknown>>(
   }
 }
 
-function mapHttpError(status: number, url: string): OrbitportSDKError {
+const MAX_HTTP_BODY_IN_ERROR = 2048;
+
+/**
+ * Maps a non-OK HTTP response to a typed OrbitportSDKError.
+ *
+ * When the server sent a (plain-text) body — e.g. a Warp body-deserialization
+ * rejection — it is appended to the message and preserved verbatim in
+ * `error.details.httpBody` so callers can react to it programmatically.
+ */
+function mapHttpError(status: number, url: string, bodyText?: string): OrbitportSDKError {
+  const body = (bodyText ?? '').trim();
+  const truncated =
+    body.length > MAX_HTTP_BODY_IN_ERROR ? `${body.slice(0, MAX_HTTP_BODY_IN_ERROR)}…` : body;
+  const suffix = truncated ? `: ${truncated}` : '';
+  const details = body ? { httpBody: body } : undefined;
+
   if (status === 401 || status === 403) {
     return new OrbitportSDKError(
-      `JSON-RPC authentication failed (HTTP ${status})`,
+      `JSON-RPC authentication failed (HTTP ${status})${suffix}`,
       ERROR_CODES.AUTH_FAILED,
       status,
+      details,
     );
   }
   if (status === 404) {
     return new OrbitportSDKError(
-      `JSON-RPC endpoint not found at ${url}`,
+      `JSON-RPC endpoint not found at ${url}${suffix}`,
       ERROR_CODES.API_ERROR,
       status,
+      details,
     );
   }
   if (status === 429) {
     return new OrbitportSDKError(
-      'JSON-RPC rate limit exceeded',
+      `JSON-RPC rate limit exceeded${suffix}`,
       ERROR_CODES.RATE_LIMITED,
       status,
+      details,
     );
   }
   if (status >= 500) {
     return new OrbitportSDKError(
-      `JSON-RPC service unavailable (HTTP ${status})`,
+      `JSON-RPC service unavailable (HTTP ${status})${suffix}`,
       ERROR_CODES.SERVICE_UNAVAILABLE,
       status,
+      details,
     );
   }
   return new OrbitportSDKError(
-    `JSON-RPC HTTP error ${status}`,
+    `JSON-RPC HTTP error ${status}${suffix}`,
     ERROR_CODES.API_ERROR,
     status,
+    details,
   );
 }
 

@@ -41,6 +41,8 @@ async function main() {
     keySpec: "AES_256_GCM96",
     keyUsage: "ENCRYPT_DECRYPT",
     scheme: "TRANSIT",
+    description: "SDK example AES key",
+    tags: [{ TagKey: "env", TagValue: "demo" }],
   });
   const aesKeyId = aes.data.KeyMetadata.KeyId;
   const enc = await sdk.kms.encrypt({ keyId: aesKeyId, plaintext: "hello kms" });
@@ -57,6 +59,7 @@ async function main() {
     keySpec: "ECDSA_P256",
     keyUsage: "SIGN_VERIFY",
     scheme: "TRANSIT",
+    description: "SDK example ECDSA P-256 key",
   });
   const sha256OfEmpty = new Uint8Array([
     0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8,
@@ -78,6 +81,7 @@ async function main() {
     keySpec: "ECC_SECG_P256K1",
     keyUsage: "SIGN_VERIFY",
     scheme: "ETHEREUM",
+    description: "SDK example Ethereum key",
   });
   console.log("Address:", eth.data.KeyMetadata.Address);
   const ethSig = await sdk.kms.sign({

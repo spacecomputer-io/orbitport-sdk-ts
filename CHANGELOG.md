@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2026-05-12
+
+### Fixed
+
+- `kms.createKey` now always sends `Description` and `Tags` on the JSON-RPC wire (as `""` / `[]` when the caller omits them). The gateway requires both fields to be present, so the previously-documented minimal payload (`{ alias, keySpec, keyUsage, scheme }`) was rejected with an HTTP 400. `description` and `tags` remain optional in `CreateKeyRequest` — callers need no source change.
+- HTTP error responses now carry the server's response body. `OrbitportSDKError.message` includes the (truncated) body text and `OrbitportSDKError.details.httpBody` holds it verbatim, so plain-text gateway errors such as `Request body deserialize error: missing field` are no longer hidden behind a bare `JSON-RPC HTTP error 400`.
+
+### Changed
+
+- `examples/kms.ts` now passes `description` (and a sample `tags` entry) so the example mirrors a complete request.
+
 ## [0.2.1] - 2026-05-04
 
 Republish of the 0.2.0 release. The 0.2.0 tag never reached the npm registry — every publish attempt 404'd because `actions/setup-node@v4` was configured with `registry-url`, which made it write a placeholder `.npmrc` and export `NODE_AUTH_TOKEN=XXXXX-XXXXX-XXXXX-XXXXX` that pnpm dutifully forwarded to npm. Dropping `registry-url` lets the OIDC trusted-publisher flow take over (see CI workflow change). No SDK behavior change vs 0.2.0.

@@ -75,7 +75,15 @@ export interface CreateKeyRequest {
   keySpec: KeySpec;
   keyUsage: KeyUsage;
   scheme?: Scheme;
+  /**
+   * Optional human-readable description. Omitted ⇒ sent to the gateway as an
+   * empty string (the field must be present on the wire).
+   */
   description?: string;
+  /**
+   * Optional key tags. Omitted ⇒ sent to the gateway as an empty array (the
+   * field must be present on the wire).
+   */
   tags?: Tag[];
 }
 
