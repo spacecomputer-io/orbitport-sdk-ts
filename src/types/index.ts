@@ -10,6 +10,11 @@ export * from './kms';
 export interface OrbitportConfig {
   clientId?: string;
   clientSecret?: string;
+  /**
+   * Pre-issued bearer token, such as a PAT from the Orbitport accounts portal.
+   * Mutually exclusive with clientId/clientSecret.
+   */
+  accessToken?: string;
   authDomain?: string;
   audience?: string;
   apiUrl?: string;

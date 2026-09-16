@@ -1,4 +1,5 @@
 import { KMSService } from '../../src/services/kms';
+import { isLosslessNumber } from '../../src';
 import { ERROR_CODES, OrbitportSDKError } from '../../src/utils/errors';
 import {
   toBase64,
@@ -23,7 +24,7 @@ function rpcOk(result: unknown) {
   return (_url: string, init?: RequestInit) => ({
     ok: true,
     status: 200,
-    json: async () => ({
+    text: async () => JSON.stringify({
       jsonrpc: '2.0',
       id: requestIdFrom(init),
       result,
@@ -35,7 +36,7 @@ function rpcErr(error: { code: number; message: string }) {
   return (_url: string, init?: RequestInit) => ({
     ok: true,
     status: 200,
-    json: async () => ({
+    text: async () => JSON.stringify({
       jsonrpc: '2.0',
       id: requestIdFrom(init),
       error,
@@ -85,6 +86,17 @@ describe('KMSService — auth gating', () => {
       svc.createKey({ alias: 'k', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
     ).rejects.toMatchObject({ code: ERROR_CODES.AUTH_FAILED });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('accepts direct-token configuration without client credentials', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ Schemes: [] }));
+    const { svc } = makeService({
+      config: { apiUrl: 'https://api.example.com', accessToken: 'header.payload.signature' },
+      token: 'header.payload.signature',
+    });
+
+    await expect(svc.getCapabilities()).resolves.toMatchObject({ success: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -224,13 +236,42 @@ describe('KMSService — createKey', () => {
     expect(ids[1]).toBeGreaterThan(ids[0]);
   });
 
-  it('rejects aliases with spaces or the reserved kms: prefix', async () => {
+
+  it('rejects aliases with spaces, underscores, slashes, or the reserved kms: prefix', async () => {
     const { svc } = makeService();
     await expect(
       svc.createKey({ alias: 'has space', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
     ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
     await expect(
+      svc.createKey({ alias: 'has_underscore', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+    await expect(
+      svc.createKey({ alias: 'has/slash', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+    await expect(
       svc.createKey({ alias: 'kms:demo', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects key specs paired with the wrong scheme or usage', async () => {
+    const { svc } = makeService();
+
+    await expect(
+      svc.createKey({
+        alias: 'bad-aes-usage',
+        scheme: 'TRANSIT',
+        keySpec: 'AES_256_GCM96',
+        keyUsage: 'SIGN_VERIFY',
+      }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+    await expect(
+      svc.createKey({
+        alias: 'bad-ethereum-scheme',
+        scheme: 'TRANSIT',
+        keySpec: 'ECC_SECG_P256K1',
+        keyUsage: 'SIGN_VERIFY',
+      }),
     ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -370,6 +411,7 @@ describe('KMSService — sign', () => {
     ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
     expect(fetch).not.toHaveBeenCalled();
   });
+
 });
 
 describe('KMSService — generateDataKey', () => {
@@ -425,7 +467,7 @@ describe('KMSService — rotateKey + getCapabilities', () => {
     expect(res.data.KeyMetadata.PrimaryVersion).toBe(2);
   });
 
-  it('returns the gateway capabilities response from getCapabilities', async () => {
+  it('filters disabled schemes from the gateway capability response', async () => {
     (fetch as jest.Mock).mockImplementationOnce(
       rpcOk({
         Schemes: [
@@ -441,12 +483,17 @@ describe('KMSService — rotateKey + getCapabilities', () => {
             SupportsGenerateDataKey: true,
             SupportsRotateKey: true,
           },
+          { Scheme: 'ETHEREUM' },
+          { Scheme: 'INTERNAL_DISABLED' },
         ],
       }),
     );
     const { svc } = makeService();
     const res = await svc.getCapabilities();
-    expect(res.data.Schemes[0].Scheme).toBe('TRANSIT');
+    expect(res.data.Schemes.map((scheme) => scheme.Scheme)).toEqual([
+      'TRANSIT',
+      'ETHEREUM',
+    ]);
   });
 
   it('surfaces JSON-RPC errors from getCapabilities as OrbitportSDKError', async () => {
@@ -455,6 +502,104 @@ describe('KMSService — rotateKey + getCapabilities', () => {
     );
     const { svc } = makeService();
     await expect(svc.getCapabilities()).rejects.toBeInstanceOf(OrbitportSDKError);
+  });
+});
+
+describe('KMSService — key store', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('puts an opaque JSON object without changing its shape', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ Name: 'github/prod', Version: 1 }));
+    const { svc } = makeService();
+    const secret = { apiKey: 'secret', nested: { enabled: true } };
+
+    const res = await svc.putSecret({ name: 'github/prod', secret });
+
+    expect(lastBody()).toMatchObject({
+      method: 'kms_keystore.Put',
+      params: { Name: 'github/prod', Secret: secret },
+    });
+    expect(res.data.Version).toBe(1);
+  });
+
+  it('gets a key-store entry', async () => {
+    const secret = { apiKey: 'secret' };
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ Name: 'github/prod', Secret: secret }));
+    const { svc } = makeService();
+
+    const res = await svc.getSecret({ name: 'github/prod' });
+
+    expect(lastBody()).toMatchObject({
+      method: 'kms_keystore.Get',
+      params: { Name: 'github/prod' },
+    });
+    expect(res.data.Secret).toEqual(secret);
+  });
+
+  it('preserves unsafe JSON numbers in key-store responses', async () => {
+    const exact = '123456789012345678901234567890';
+    (fetch as jest.Mock).mockImplementationOnce((_url, init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      text: async () =>
+        `{"jsonrpc":"2.0","id":${requestIdFrom(init)},"result":{"Name":"numbers","Secret":{"big":${exact},"safe":42}}}`,
+    } as unknown as Response));
+    const { svc } = makeService();
+
+    const res = await svc.getSecret({ name: 'numbers' });
+    const big = res.data.Secret.big;
+
+    expect(isLosslessNumber(big)).toBe(true);
+    expect(String(big)).toBe(exact);
+    expect(res.data.Secret.safe).toBe(42);
+
+    (fetch as jest.Mock).mockImplementationOnce(
+      rpcOk({ Name: 'numbers-copy', Version: 1 }),
+    );
+    await svc.putSecret({ name: 'numbers-copy', secret: res.data.Secret });
+
+    const putInit = (fetch as jest.Mock).mock.calls[1][1] as RequestInit;
+    const putBody = putInit.body as string;
+    expect(putBody).toContain(`"big":${exact}`);
+    expect(putBody).not.toContain('"isLosslessNumber"');
+  });
+
+  it('lists immediate entries under an optional prefix', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ Names: ['prod', 'staging/'] }));
+    const { svc } = makeService();
+
+    const res = await svc.listSecrets({ prefix: 'github' });
+
+    expect(lastBody()).toMatchObject({
+      method: 'kms_keystore.List',
+      params: { Prefix: 'github' },
+    });
+    expect(res.data.Names).toEqual(['prod', 'staging/']);
+  });
+
+  it('deletes a key-store entry', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ Name: 'github/prod' }));
+    const { svc } = makeService();
+
+    await svc.deleteSecret({ name: 'github/prod' });
+
+    expect(lastBody()).toMatchObject({
+      method: 'kms_keystore.Delete',
+      params: { Name: 'github/prod' },
+    });
+  });
+
+  it('rejects invalid names and non-object secrets before calling fetch', async () => {
+    const { svc } = makeService();
+
+    await expect(svc.getSecret({ name: '../escape' })).rejects.toMatchObject({
+      code: ERROR_CODES.VALIDATION_ERROR,
+    });
+    await expect(
+      // @ts-expect-error arrays are not valid key-store secret objects
+      svc.putSecret({ name: 'valid/name', secret: ['not', 'an', 'object'] }),
+    ).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+    expect(fetch).not.toHaveBeenCalled();
   });
 });
 

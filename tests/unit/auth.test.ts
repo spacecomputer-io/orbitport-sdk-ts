@@ -41,6 +41,22 @@ describe("AuthService", () => {
     });
   });
 
+  describe("direct access token", () => {
+    it("returns the configured access token without reading storage or calling OAuth", async () => {
+      const directToken = "header.payload.signature";
+      const directAuth = new AuthService(
+        { ...mockConfig, clientId: undefined, clientSecret: undefined, accessToken: directToken },
+        mockStorage,
+      );
+
+      await expect(directAuth.getValidToken()).resolves.toBe(directToken);
+      await expect(directAuth.isTokenValid()).resolves.toBe(true);
+      await expect(directAuth.getTokenInfo()).resolves.toEqual({ valid: true });
+      expect(mockStorage.get).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe("isTokenValid", () => {
     it("should return false when no token in storage", async () => {
       (mockStorage.get as jest.Mock).mockResolvedValue(null);

@@ -22,6 +22,14 @@ import type {
   GenerateDataKeyResponse,
   RotateKeyRequest,
   RotateKeyResponse,
+  KeyStorePutRequest,
+  KeyStorePutResponse,
+  KeyStoreGetRequest,
+  KeyStoreGetResponse,
+  KeyStoreListRequest,
+  KeyStoreListResponse,
+  KeyStoreDeleteRequest,
+  KeyStoreDeleteResponse,
   GetCapabilitiesResponse,
 } from '../types';
 import { OrbitportSDKError, ERROR_CODES } from '../utils/errors';
@@ -39,6 +47,10 @@ import {
   sanitizeSignRequest,
   sanitizeGenerateDataKeyRequest,
   sanitizeRotateKeyRequest,
+  sanitizeKeyStorePutRequest,
+  sanitizeKeyStoreGetRequest,
+  sanitizeKeyStoreListRequest,
+  sanitizeKeyStoreDeleteRequest,
 } from '../utils/validation';
 
 export class KMSService {
@@ -58,6 +70,10 @@ export class KMSService {
 
   setDebug(debug: boolean): void {
     this.debug = debug;
+  }
+
+  updateConfig(config: OrbitportConfig): void {
+    this.config = config;
   }
 
   async createKey(
@@ -152,14 +168,57 @@ export class KMSService {
     return this._call<RotateKeyResponse>('kms.RotateKey', params, options);
   }
 
+
+  async putSecret(
+    req: KeyStorePutRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStorePutResponse>> {
+    const params = sanitizeKeyStorePutRequest(req);
+    return this._call<KeyStorePutResponse>('kms_keystore.Put', params, options);
+  }
+
+  async getSecret(
+    req: KeyStoreGetRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStoreGetResponse>> {
+    const params = sanitizeKeyStoreGetRequest(req);
+    return this._call<KeyStoreGetResponse>('kms_keystore.Get', params, options);
+  }
+
+  async listSecrets(
+    req: KeyStoreListRequest = {},
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStoreListResponse>> {
+    const params = sanitizeKeyStoreListRequest(req);
+    return this._call<KeyStoreListResponse>('kms_keystore.List', params, options);
+  }
+
+  async deleteSecret(
+    req: KeyStoreDeleteRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStoreDeleteResponse>> {
+    const params = sanitizeKeyStoreDeleteRequest(req);
+    return this._call<KeyStoreDeleteResponse>('kms_keystore.Delete', params, options);
+  }
+
   async getCapabilities(
     options: RequestOptions = {},
   ): Promise<ServiceResult<GetCapabilitiesResponse>> {
-    return this._call<GetCapabilitiesResponse>(
+    const response = await this._call<GetCapabilitiesResponse>(
       'kms.GetCapabilities',
       {},
       options,
     );
+    return {
+      ...response,
+      data: {
+        Schemes: response.data.Schemes.filter(
+          (capability) =>
+            capability.Scheme === 'TRANSIT' ||
+            capability.Scheme === 'ETHEREUM',
+        ),
+      },
+    };
   }
 
   /**
@@ -179,9 +238,13 @@ export class KMSService {
     params: Record<string, unknown>,
     options: RequestOptions,
   ): Promise<{ result: T; metadata: ResponseMetadata }> {
-    if (!this.config.clientId || !this.config.clientSecret) {
+    const hasAuthentication = Boolean(
+      this.config.accessToken ||
+      (this.config.clientId && this.config.clientSecret),
+    );
+    if (!hasAuthentication) {
       throw new OrbitportSDKError(
-        'KMS requires API credentials (clientId and clientSecret)',
+        'KMS requires an access token or client credentials',
         ERROR_CODES.AUTH_FAILED,
       );
     }

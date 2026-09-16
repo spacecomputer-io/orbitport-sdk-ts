@@ -14,6 +14,7 @@ export { AuthService } from "./services/auth";
 export { CTRNGService } from "./services/ctrng";
 export { BeaconService } from "./services/ipfs";
 export { KMSService } from "./services/kms";
+export { LosslessNumber, isLosslessNumber } from "lossless-json";
 export {
   toBase64,
   fromBase64ToUtf8,
@@ -35,6 +36,10 @@ import type {
   SignRequest,
   GenerateDataKeyRequest,
   RotateKeyRequest,
+  KeyStorePutRequest,
+  KeyStoreGetRequest,
+  KeyStoreListRequest,
+  KeyStoreDeleteRequest,
 } from "./types";
 import { AuthService } from "./services/auth";
 import { CTRNGService } from "./services/ctrng";
@@ -126,6 +131,7 @@ export class OrbitportSDK {
         ...this.config,
         clientId: "[REDACTED]",
         clientSecret: "[REDACTED]",
+        accessToken: "[REDACTED]",
       });
     }
   }
@@ -241,6 +247,16 @@ export class OrbitportSDK {
         this.kmsService.generateDataKey(req, options),
       rotateKey: (req: RotateKeyRequest, options?: RequestOptions) =>
         this.kmsService.rotateKey(req, options),
+      keyStore: {
+        put: (req: KeyStorePutRequest, options?: RequestOptions) =>
+          this.kmsService.putSecret(req, options),
+        get: (req: KeyStoreGetRequest, options?: RequestOptions) =>
+          this.kmsService.getSecret(req, options),
+        list: (req: KeyStoreListRequest = {}, options?: RequestOptions) =>
+          this.kmsService.listSecrets(req, options),
+        delete: (req: KeyStoreDeleteRequest, options?: RequestOptions) =>
+          this.kmsService.deleteSecret(req, options),
+      },
       getCapabilities: (options?: RequestOptions) =>
         this.kmsService.getCapabilities(options),
     };
@@ -303,9 +319,25 @@ export class OrbitportSDK {
    * ```
    */
   updateConfig(newConfig: Partial<OrbitportConfig>): void {
-    const updatedConfig = sanitizeConfig({ ...this.config, ...newConfig });
+    const mergedConfig: Partial<OrbitportConfig> = {
+      ...this.config,
+      ...newConfig,
+    };
+    if (newConfig.accessToken !== undefined) {
+      mergedConfig.clientId = undefined;
+      mergedConfig.clientSecret = undefined;
+    } else if (
+      newConfig.clientId !== undefined ||
+      newConfig.clientSecret !== undefined
+    ) {
+      mergedConfig.accessToken = undefined;
+    }
+
+    const updatedConfig = sanitizeConfig(mergedConfig);
     this.config = updatedConfig;
     this.authService.updateConfig(updatedConfig);
+    this.ctrngService.updateConfig(updatedConfig);
+    this.kmsService.updateConfig(updatedConfig);
 
     // Update IPFS configuration if provided
     if (newConfig.ipfs) {
@@ -316,7 +348,9 @@ export class OrbitportSDK {
     if (this.debug) {
       console.log("[OrbitportSDK] Configuration updated:", {
         ...updatedConfig,
+        clientId: "[REDACTED]",
         clientSecret: "[REDACTED]",
+        accessToken: "[REDACTED]",
       });
     }
   }
@@ -358,14 +392,16 @@ export class OrbitportSDK {
    *
    * @returns Current configuration object
    */
-  getConfig(): Omit<OrbitportConfig, "clientSecret"> & {
+  getConfig(): Omit<OrbitportConfig, "clientId" | "clientSecret" | "accessToken"> & {
     clientId: "[REDACTED]";
     clientSecret: "[REDACTED]";
+    accessToken: "[REDACTED]";
   } {
     return {
       ...this.config,
       clientId: "[REDACTED]",
       clientSecret: "[REDACTED]",
+      accessToken: "[REDACTED]",
     };
   }
 }

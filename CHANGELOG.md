@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- Direct bearer-token authentication through `OrbitportConfig.accessToken`, including PATs issued by the accounts portal. The token is used in memory and redacted from debug/config output.
+- Tenant-scoped JSON key-store methods under `sdk.kms.keyStore`: `put`, `get`, `list`, and `delete`.
+- Lossless parsing for JSON-RPC numbers that JavaScript cannot represent exactly. These values are returned as exported `LosslessNumber` objects.
+
+### Changed
+
+- `getCapabilities()` exposes only the public `TRANSIT` and `ETHEREUM` schemes, even when a backend advertises disabled schemes.
+- Removed the deprecated `SYMMETRIC_DEFAULT` key spec from the public TypeScript union. Use `AES_256_GCM96`; this is a source-breaking change for callers still using the old literal.
+- KMS alias validation now matches the gateway contract: letters, digits, dots, and hyphens only.
+- E2E tests accept `ORBITPORT_ACCESS_TOKEN` and `ORBITPORT_API_URL`.
+
 ## [0.2.2] - 2026-05-12
 
 ### Fixed

@@ -18,7 +18,7 @@ import {
   createNetworkError,
 } from '../utils/errors';
 import { withRetry, RETRY_STRATEGIES } from '../utils/retry';
-import { isTokenExpired } from '../utils/validation';
+import { isTokenExpired, isValidJWT } from '../utils/validation';
 
 /**
  * Authentication service class
@@ -66,6 +66,24 @@ export class AuthService {
    */
   private async _getValidToken(): Promise<string | null> {
     try {
+      // A caller-supplied bearer token is used directly. It is never copied to
+      // SDK storage or exchanged through the OAuth client-credentials flow.
+      if (this.config.accessToken) {
+        if (
+          isValidJWT(this.config.accessToken) &&
+          isTokenExpired(this.config.accessToken)
+        ) {
+          throw new OrbitportSDKError(
+            'Configured access token is expired',
+            ERROR_CODES.AUTH_FAILED,
+          );
+        }
+        if (this.debug) {
+          console.log('[OrbitportSDK] Using configured access token');
+        }
+        return this.config.accessToken;
+      }
+
       // Try to get existing token from storage
       const existingToken = await this.storage.get();
 
@@ -243,6 +261,10 @@ export class AuthService {
    */
   async isTokenValid(): Promise<boolean> {
     try {
+      if (this.config.accessToken) {
+        return !isValidJWT(this.config.accessToken) ||
+          !isTokenExpired(this.config.accessToken);
+      }
       const token = await this.storage.get();
       return token !== null && !isTokenExpired(token);
     } catch {
@@ -255,16 +277,20 @@ export class AuthService {
    */
   async getTokenInfo(): Promise<{ valid: boolean; expiresAt?: number }> {
     try {
-      const token = await this.storage.get();
+      const token = this.config.accessToken || await this.storage.get();
       if (!token) {
         return { valid: false };
       }
 
-      if (isTokenExpired(token)) {
+      if (isValidJWT(token) && isTokenExpired(token)) {
         return { valid: false };
       }
 
-      // Parse token to get expiration
+      if (!isValidJWT(token)) {
+        return { valid: true };
+      }
+
+      // Parse a JWT to return its expiration time.
       const parts = token.split('.');
       if (parts.length >= 2) {
         const payload = JSON.parse(atob(parts[1]));

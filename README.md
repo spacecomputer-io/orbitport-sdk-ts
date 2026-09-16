@@ -5,7 +5,7 @@ Official TypeScript SDK for SpaceComputer Orbitport. One client, all Orbitport p
 | Product | Namespace | What it does |
 | --- | --- | --- |
 | cTRNG | `sdk.ctrng` | Cosmic True Random Number Generation (API or IPFS beacon). |
-| KMS | `sdk.kms` | Key Management Service — create, encrypt, decrypt, sign, generate data keys, rotate (TRANSIT + ETHEREUM schemes). |
+| KMS | `sdk.kms` | Key management, post-quantum signing and key agreement, plus a tenant-scoped JSON key store. |
 
 ## Installation
 
@@ -50,17 +50,18 @@ const sig = await sdk.kms.sign({
 - 🛡️ **Consistent error model** — typed `OrbitportSDKError` with stable codes across products.
 - 💾 **Flexible storage** — browser, Node.js, and custom token stores.
 - 🌌 **cTRNG specific:** API source with automatic IPFS-beacon fallback, dual-source comparison for integrity.
-- 🔑 **KMS specific:** TRANSIT (AES, ECDSA, Ed25519, RSA) and ETHEREUM (secp256k1) schemes over JSON-RPC 2.0.
+- 🔑 **KMS specific:** TRANSIT and ETHEREUM schemes over JSON-RPC 2.0, plus the tenant-scoped key store.
 
 ## Configuration
 
-The SDK can be initialized with or without API credentials. Credentials unlock authenticated products (KMS, cTRNG via API); cTRNG can also run credential-less against the public IPFS beacon.
+The SDK accepts either OAuth client credentials or a pre-issued bearer token. Use `accessToken` for PATs created in the accounts portal; do not combine it with `clientId` and `clientSecret`. cTRNG can also run without authentication against the public IPFS beacon.
 
 ```typescript
 interface OrbitportConfig {
-  clientId?: string; // Optional: Your client ID
-  clientSecret?: string; // Optional: Your client secret
-  authDomain?: string; // Optional: Auth domain (default: "auth.spacecomputer.io")
+  clientId?: string; // OAuth client ID
+  clientSecret?: string; // OAuth client secret
+  accessToken?: string; // Pre-issued bearer token or PAT
+  authDomain?: string; // OAuth domain (default: "auth.spacecomputer.io")
   audience?: string; // Optional: Auth audience URL (default: "https://op.spacecomputer.io/api")
   apiUrl?: string; // Optional: API server URL
   timeout?: number; // Optional: Request timeout in ms (default: 30000)
@@ -75,6 +76,17 @@ interface IPFSConfig {
   timeout?: number;
   defaultBeaconPath?: string;
 }
+```
+
+For the development environment, pass the PAT from `accounts-dev.spacecomputer.io` and point the SDK at `op-dev`:
+
+```typescript
+const sdk = new OrbitportSDK({
+  config: {
+    accessToken: process.env.ORBITPORT_ACCESS_TOKEN,
+    apiUrl: "https://op-dev.spacecomputer.io",
+  },
+});
 ```
 
 All products return a uniform `ServiceResult<T>`:
@@ -239,13 +251,17 @@ console.log(dec.data.Plaintext); // "hello kms"
 
 | Method | Description |
 | --- | --- |
-| `createKey({ alias, keySpec, keyUsage, scheme?, description?, tags? })` | Create a new key (`scheme`: `"TRANSIT"` (default) or `"ETHEREUM"`). |
+| `createKey({ alias, keySpec, keyUsage, scheme?, description?, tags? })` | Create a key under `TRANSIT` (default) or `ETHEREUM`. |
 | `encrypt({ keyId, plaintext, encoding?, encryptionAlgorithm? })` | Encrypt under a TRANSIT key. |
 | `decrypt({ ciphertextBlob, keyId?, encoding?, encryptionAlgorithm? })` | Decrypt a previously produced ciphertext. |
-| `sign({ keyId, message, signingAlgorithm, messageType? })` | Sign a message or precomputed digest. |
+| `sign({ keyId, message, signingAlgorithm, messageType? })` | Sign with a TRANSIT or ETHEREUM key. |
 | `generateDataKey({ keyId, dataKeySpec? \| numberOfBytes? })` | Envelope encryption helper — returns a fresh data key, both as plaintext and wrapped under `keyId`. |
 | `rotateKey({ keyId })` | Rotate the key's primary version. |
-| `getCapabilities()` | Discover supported schemes and algorithms. |
+| `keyStore.put({ name, secret })` | Store or replace a tenant-scoped JSON object. |
+| `keyStore.get({ name })` | Read a key-store entry. |
+| `keyStore.list({ prefix? })` | List immediate entries and folders under a prefix. |
+| `keyStore.delete({ name })` | Delete a key-store entry. |
+| `getCapabilities()` | Discover the deployed schemes and algorithms. |
 
 All methods return `Promise<ServiceResult<T>>` with `T` shaped to match the wire response.
 
@@ -284,6 +300,34 @@ The SDK also exports `toBase64` and `fromBase64ToUtf8` for direct use.
 
 Keys created with `scheme: "ETHEREUM"` (and `keySpec: "ECC_SECG_P256K1"`) expose an `Address` field on `KeyMetadata`. Use `signingAlgorithm: "ETHEREUM_SECP256K1"` together with `messageType: "EIP191"` for personal-sign style messages.
 
+### Key store
+
+The key store keeps tenant-scoped JSON objects under slash-separated names. `list` returns immediate children; folder names end in `/`.
+
+```typescript
+await sdk.kms.keyStore.put({
+  name: "github/prod",
+  secret: { apiKey: "..." },
+});
+
+const entry = await sdk.kms.keyStore.get({ name: "github/prod" });
+const names = await sdk.kms.keyStore.list({ prefix: "github" });
+await sdk.kms.keyStore.delete({ name: "github/prod" });
+```
+
+Names may contain letters, digits, `.`, `_`, and `-` in slash-separated segments. The SDK rejects `.` and `..` segments.
+
+Key-store reads preserve large or high-precision JSON numbers as `LosslessNumber` values. Safe numbers stay as ordinary JavaScript numbers. Use the exported `isLosslessNumber` helper and call `.toString()` when you need the exact numeric text. You can pass a retrieved `Secret` back to `put` without changing those values.
+
+```typescript
+import { isLosslessNumber } from "@spacecomputer-io/orbitport-sdk-ts";
+
+const value = entry.data.Secret.largeCounter;
+if (isLosslessNumber(value)) {
+  console.log(value.toString());
+}
+```
+
 ### Errors and retries
 
 KMS methods do **not** retry by default — `CreateKey` and `Sign` are not idempotent. Pass `RequestOptions.retries` per call when you want retry behavior.
@@ -301,7 +345,7 @@ ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
 
 ## Authentication (`sdk.auth`)
 
-OAuth2 client-credentials handling shared across every product. Tokens are acquired on first use, cached, and refreshed transparently — you usually don't need to touch `sdk.auth` directly.
+Pass `accessToken` when you already have a PAT or bearer token. The SDK uses it directly and does not write it to token storage. For OAuth client credentials, the SDK still acquires, caches, and refreshes tokens automatically.
 
 ```typescript
 const isValid = await sdk.auth.isTokenValid();
@@ -351,7 +395,12 @@ npm run build
 # Run all tests
 npm test
 
-# Run e2e tests (requires valid credentials)
+# Run e2e tests with a PAT against the development environment
+ORBITPORT_ACCESS_TOKEN="..." \
+ORBITPORT_API_URL="https://op-dev.spacecomputer.io" \
+  npm run test:e2e
+
+# Or use OAuth client credentials
 ORBITPORT_CLIENT_ID="your-id" ORBITPORT_CLIENT_SECRET="your-secret" npm run test:e2e
 ```
 

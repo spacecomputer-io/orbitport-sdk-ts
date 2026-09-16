@@ -6,11 +6,12 @@
  * shape so users can grep gateway docs.
  */
 
+import type { LosslessNumber } from 'lossless-json';
+
 export type Scheme = 'TRANSIT' | 'ETHEREUM';
 
 export type KeySpec =
   | 'AES_256_GCM96'
-  | 'SYMMETRIC_DEFAULT' // legacy / op-dev only
   | 'ECDSA_P256'
   | 'ECDSA_P384'
   | 'ED25519'
@@ -54,12 +55,12 @@ export interface KeyMetadata {
 }
 
 export interface SchemeCapability {
-  Scheme: string;
-  KeySpecs: string[];
-  KeyUsages: string[];
-  EncryptionAlgorithms: string[];
-  DataKeySpecs: string[];
-  SigningCapabilities: { SigningAlgorithm: string; MessageTypes: string[] }[];
+  Scheme: Scheme;
+  KeySpecs: KeySpec[];
+  KeyUsages: KeyUsage[];
+  EncryptionAlgorithms: EncryptionAlgorithm[];
+  DataKeySpecs: DataKeySpec[];
+  SigningCapabilities: { SigningAlgorithm: SigningAlgorithm; MessageTypes: MessageType[] }[];
   SupportsEncrypt: boolean;
   SupportsDecrypt: boolean;
   SupportsGenerateDataKey: boolean;
@@ -146,6 +147,29 @@ export interface RotateKeyRequest {
   keyId: string;
 }
 
+export type JsonPrimitive = string | number | boolean | null | LosslessNumber;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export interface KeyStorePutRequest {
+  name: string;
+  secret: JsonObject;
+}
+
+export interface KeyStoreGetRequest {
+  name: string;
+}
+
+export interface KeyStoreListRequest {
+  prefix?: string;
+}
+
+export interface KeyStoreDeleteRequest {
+  name: string;
+}
+
 // ---------------------------------------------------------------------------
 // Outputs (PascalCase wire shape)
 // ---------------------------------------------------------------------------
@@ -188,6 +212,24 @@ export interface GenerateDataKeyResponse {
 
 export interface RotateKeyResponse {
   KeyMetadata: KeyMetadata;
+}
+
+export interface KeyStorePutResponse {
+  Name: string;
+  Version: number;
+}
+
+export interface KeyStoreGetResponse {
+  Name: string;
+  Secret: JsonObject;
+}
+
+export interface KeyStoreListResponse {
+  Names: string[];
+}
+
+export interface KeyStoreDeleteResponse {
+  Name: string;
 }
 
 export interface GetCapabilitiesResponse {

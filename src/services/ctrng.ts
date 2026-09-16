@@ -54,8 +54,12 @@ export class CTRNGService {
   ): Promise<ServiceResult<CTRNGResponse>> {
     let sanitizedRequest = sanitizeCTRNGRequest(request);
 
-    // If no API credentials are provided, force IPFS mode for clarity
-    if (!this.config.clientId || !this.config.clientSecret) {
+    // If no API authentication is provided, force IPFS mode for clarity
+    const hasApiAuth = Boolean(
+      this.config.accessToken ||
+      (this.config.clientId && this.config.clientSecret),
+    );
+    if (!hasApiAuth) {
       if (sanitizedRequest.src !== 'ipfs') {
         sanitizedRequest = {
           src: 'ipfs',
@@ -91,7 +95,7 @@ export class CTRNGService {
         sanitizedRequest.src === 'rng'
       ) {
         // TypeScript knows this is APICTRNGRequest
-        if (this.config.clientId && this.config.clientSecret) {
+        if (hasApiAuth) {
           try {
             return await this._getFromAPI(sanitizedRequest, requestOptions);
           } catch (apiError) {
@@ -478,6 +482,13 @@ export class CTRNGService {
         );
       }
     }
+  }
+
+  /**
+   * Updates the service configuration.
+   */
+  updateConfig(config: OrbitportConfig): void {
+    this.config = config;
   }
 
   /**

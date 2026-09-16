@@ -57,6 +57,26 @@ describe("Validation Utilities", () => {
       );
     });
 
+    it("should accept a direct access token without client credentials", () => {
+      const result = validateConfig({ accessToken: "header.payload.signature" });
+
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("should reject a direct access token combined with client credentials", () => {
+      const result = validateConfig({
+        accessToken: "header.payload.signature",
+        clientId: "test-client-id",
+        clientSecret: "test-client-secret",
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain(
+        "accessToken cannot be combined with clientId or clientSecret"
+      );
+    });
+
     it("should reject invalid URLs", () => {
       const config = {
         clientId: "test-client-id",
@@ -332,6 +352,12 @@ describe("Validation Utilities", () => {
       };
 
       expect(() => sanitizeConfig(config)).toThrow();
+    });
+
+    it("should trim and preserve a direct access token", () => {
+      const result = sanitizeConfig({ accessToken: "  header.payload.signature  " });
+
+      expect(result.accessToken).toBe("header.payload.signature");
     });
   });
 

@@ -1,8 +1,9 @@
 /**
  * End-to-end tests for Orbitport SDK
  *
- * These tests require valid credentials and will make actual API calls.
- * Set ORBITPORT_CLIENT_ID and ORBITPORT_CLIENT_SECRET environment variables.
+ * These tests require either a pre-issued bearer token or OAuth client credentials.
+ * Set ORBITPORT_ACCESS_TOKEN, or set ORBITPORT_CLIENT_ID and
+ * ORBITPORT_CLIENT_SECRET. ORBITPORT_API_URL overrides the API origin.
  */
 
 import { OrbitportSDK, createOrbitportSDK } from "../src/index";
@@ -11,24 +12,27 @@ import { OrbitportSDK, createOrbitportSDK } from "../src/index";
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("Orbitport SDK E2E Tests", () => {
+  const accessToken = process.env.ORBITPORT_ACCESS_TOKEN;
   const clientId = process.env.ORBITPORT_CLIENT_ID;
   const clientSecret = process.env.ORBITPORT_CLIENT_SECRET;
+  const apiUrl = process.env.ORBITPORT_API_URL;
 
-  if (!clientId || !clientSecret) {
+  if (!accessToken && (!clientId || !clientSecret)) {
     console.warn(
-      "Skipping E2E tests: ORBITPORT_CLIENT_ID and ORBITPORT_CLIENT_SECRET not set"
+      "Skipping E2E tests: set ORBITPORT_ACCESS_TOKEN or both ORBITPORT_CLIENT_ID and ORBITPORT_CLIENT_SECRET"
     );
     return;
   }
+
+  const authenticatedConfig = accessToken
+    ? { accessToken, apiUrl }
+    : { clientId, clientSecret, apiUrl };
 
   let sdk: OrbitportSDK;
 
   beforeAll(() => {
     sdk = new OrbitportSDK({
-      config: {
-        clientId,
-        clientSecret,
-      },
+      config: authenticatedConfig,
       // debug: true, // Enable debug logging for tests
     });
   });
@@ -467,8 +471,7 @@ describe("Orbitport SDK E2E Tests", () => {
       // Create SDK with invalid API URL to test error handling
       const invalidSdk = new OrbitportSDK({
         config: {
-          clientId,
-          clientSecret,
+          ...authenticatedConfig,
           apiUrl: "https://invalid-api-url-that-does-not-exist.com",
         },
         // debug: true, // Enable debug for error testing
@@ -523,10 +526,7 @@ describe("Orbitport SDK E2E Tests", () => {
 
       // Create new SDK instance (should reuse stored token)
       const sdk2 = new OrbitportSDK({
-        config: {
-          clientId,
-          clientSecret,
-        },
+        config: authenticatedConfig,
       });
 
       const token2 = await sdk2.auth.getValidToken();
@@ -555,10 +555,7 @@ describe("Orbitport SDK E2E Tests", () => {
       // Add delay before this test
       await delay(2000);
 
-      const factorySdk = createOrbitportSDK({
-        clientId,
-        clientSecret,
-      });
+      const factorySdk = createOrbitportSDK(authenticatedConfig);
 
       const result = await factorySdk.ctrng.random();
       expect(result).toBeDefined();
@@ -571,11 +568,11 @@ describe("Orbitport SDK E2E Tests", () => {
     let transitKeyId: string | undefined;
     let ethereumKeyId: string | undefined;
 
-    it("lists supported schemes (TRANSIT and ETHEREUM) from getCapabilities", async () => {
+    it("lists the public TRANSIT and ETHEREUM schemes", async () => {
       const res = await sdk.kms.getCapabilities();
       expect(res.success).toBe(true);
       const schemes = res.data.Schemes.map((s) => s.Scheme);
-      expect(schemes).toEqual(expect.arrayContaining(["TRANSIT", "ETHEREUM"]));
+      expect(schemes).toEqual(["TRANSIT", "ETHEREUM"]);
     });
 
     it("creates an AES key, encrypts a message, and decrypts it back", async () => {
@@ -704,6 +701,35 @@ describe("Orbitport SDK E2E Tests", () => {
       const v1 = before.data.KeyMetadata.PrimaryVersion;
       const after = await sdk.kms.rotateKey({ keyId });
       expect(after.data.KeyMetadata.PrimaryVersion).toBeGreaterThan(v1);
+    });
+
+    it("puts, gets, lists, and deletes a disposable key-store entry", async () => {
+      const name = `sdk-e2e/${stamp}`;
+      let created = false;
+
+      try {
+        const put = await sdk.kms.keyStore.put({
+          name,
+          secret: { purpose: "sdk-e2e", stamp },
+        });
+        created = true;
+        expect(put.data).toMatchObject({ Name: name, Version: 1 });
+
+        const get = await sdk.kms.keyStore.get({ name });
+        expect(get.data).toEqual({
+          Name: name,
+          Secret: { purpose: "sdk-e2e", stamp },
+        });
+
+        const list = await sdk.kms.keyStore.list({ prefix: "sdk-e2e" });
+        expect(list.data.Names).toContain(name);
+      } finally {
+        if (created) {
+          await sdk.kms.keyStore.delete({ name });
+        }
+      }
+
+      await expect(sdk.kms.keyStore.get({ name })).rejects.toBeDefined();
     });
   });
 });

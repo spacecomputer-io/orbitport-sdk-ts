@@ -14,10 +14,15 @@ import type {
   SignRequest,
   GenerateDataKeyRequest,
   RotateKeyRequest,
+  KeyStorePutRequest,
+  KeyStoreGetRequest,
+  KeyStoreListRequest,
+  KeyStoreDeleteRequest,
   Tag,
   PlaintextEncoding,
 } from '../types';
 import { createValidationError } from './errors';
+import { stringify as stringifyLosslessJson } from 'lossless-json';
 
 /**
  * Validates the Orbitport configuration
@@ -46,12 +51,25 @@ export function validateConfig(
     }
   }
 
-  // If one credential is provided, both must be provided
+  if (config.accessToken !== undefined) {
+    if (
+      typeof config.accessToken !== 'string' ||
+      config.accessToken.trim().length === 0
+    ) {
+      errors.push('accessToken must be a non-empty string');
+    }
+  }
+
+  // If one client credential is provided, both must be provided.
   if (
     (config.clientId && !config.clientSecret) ||
     (!config.clientId && config.clientSecret)
   ) {
     errors.push('Both clientId and clientSecret must be provided together');
+  }
+
+  if (config.accessToken && (config.clientId || config.clientSecret)) {
+    errors.push('accessToken cannot be combined with clientId or clientSecret');
   }
 
   if (config.authDomain) {
@@ -278,6 +296,7 @@ export function sanitizeConfig(
   return {
     clientId: config.clientId?.trim(),
     clientSecret: config.clientSecret?.trim(),
+    accessToken: config.accessToken?.trim(),
     authDomain: config.authDomain?.trim() || getDefaultAuthDomain(),
     audience: config.audience?.trim() || getDefaultAudience(),
     apiUrl: config.apiUrl || getDefaultApiUrl(),
@@ -369,17 +388,19 @@ export function sanitizeCTRNGRequest(
 // KMS validation
 // ---------------------------------------------------------------------------
 
-const KMS_ALIAS_REGEX = /^[A-Za-z0-9.\-_/]{1,128}$/;
+const KMS_ALIAS_REGEX = /^[A-Za-z0-9.-]{1,128}$/;
 const VALID_KEY_SPECS = new Set([
   'AES_256_GCM96',
-  'SYMMETRIC_DEFAULT',
   'ECDSA_P256',
   'ECDSA_P384',
   'ED25519',
   'RSA_4096',
   'ECC_SECG_P256K1',
 ]);
-const VALID_KEY_USAGES = new Set(['ENCRYPT_DECRYPT', 'SIGN_VERIFY']);
+const VALID_KEY_USAGES = new Set([
+  'ENCRYPT_DECRYPT',
+  'SIGN_VERIFY',
+]);
 const VALID_SCHEMES = new Set(['TRANSIT', 'ETHEREUM']);
 const VALID_SIGNING_ALGORITHMS = new Set([
   'ECDSA_SHA_256',
@@ -406,7 +427,7 @@ export function validateKMSAlias(alias: string): void {
   }
   if (!KMS_ALIAS_REGEX.test(alias)) {
     throw createValidationError(
-      'alias must match /^[A-Za-z0-9.\\-_/]{1,128}$/ (no spaces; max 128 chars)',
+      'alias must match /^[A-Za-z0-9.-]{1,128}$/ (letters, digits, dot, or hyphen; max 128 chars)',
     );
   }
 }
@@ -448,6 +469,26 @@ export function sanitizeCreateKeyRequest(req: CreateKeyRequest): Record<string, 
   if (req.scheme !== undefined && !VALID_SCHEMES.has(req.scheme)) {
     throw createValidationError(`createKey: invalid scheme "${req.scheme}"`);
   }
+
+  const scheme = req.scheme ?? 'TRANSIT';
+  let expectedScheme = 'TRANSIT';
+  let expectedUsage = 'SIGN_VERIFY';
+  if (req.keySpec === 'AES_256_GCM96') {
+    expectedUsage = 'ENCRYPT_DECRYPT';
+  } else if (req.keySpec === 'ECC_SECG_P256K1') {
+    expectedScheme = 'ETHEREUM';
+  }
+  if (scheme !== expectedScheme) {
+    throw createValidationError(
+      `createKey: keySpec "${req.keySpec}" requires scheme "${expectedScheme}"`,
+    );
+  }
+  if (req.keyUsage !== expectedUsage) {
+    throw createValidationError(
+      `createKey: keySpec "${req.keySpec}" requires keyUsage "${expectedUsage}"`,
+    );
+  }
+
   if (req.description !== undefined && typeof req.description !== 'string') {
     throw createValidationError('createKey: description must be a string');
   }
@@ -592,6 +633,7 @@ export function sanitizeSignRequest(req: SignRequest): {
       'sign: messageType "EIP191" requires signingAlgorithm "ETHEREUM_SECP256K1"',
     );
   }
+
   return {
     keyId,
     message: req.message,
@@ -649,4 +691,102 @@ export function sanitizeRotateKeyRequest(
   }
   const keyId = requireKeyId('rotateKey', req.keyId);
   return { KeyId: keyId };
+}
+
+const KEY_STORE_SEGMENT_REGEX = /^[A-Za-z0-9._-]+$/;
+const MAX_KEY_STORE_NAME_LENGTH = 256;
+
+function sanitizeKeyStoreName(method: string, name: unknown): string {
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw createValidationError(`${method}: name must be a non-empty string`);
+  }
+  const value = name.trim();
+  if (value.length > MAX_KEY_STORE_NAME_LENGTH) {
+    throw createValidationError(`${method}: name must be at most 256 characters`);
+  }
+  if (value.startsWith('/') || value.endsWith('/')) {
+    throw createValidationError(`${method}: name must not start or end with /`);
+  }
+  const invalidSegment = value
+    .split('/')
+    .some((segment) =>
+      segment.length === 0 ||
+      segment === '.' ||
+      segment === '..' ||
+      !KEY_STORE_SEGMENT_REGEX.test(segment));
+  if (invalidSegment) {
+    throw createValidationError(`${method}: name contains an invalid path segment`);
+  }
+  return value;
+}
+
+function sanitizeKeyStorePrefix(prefix: unknown): string | undefined {
+  if (prefix === undefined) return undefined;
+  if (typeof prefix !== 'string') {
+    throw createValidationError('listSecrets: prefix must be a string');
+  }
+  const value = prefix.trim().replace(/^\/+|\/+$/g, '');
+  if (value.length === 0) return '';
+  if (value.length > MAX_KEY_STORE_NAME_LENGTH) {
+    throw createValidationError('listSecrets: prefix must be at most 256 characters');
+  }
+  const invalidSegment = value
+    .split('/')
+    .some((segment) =>
+      segment.length === 0 ||
+      segment === '.' ||
+      segment === '..' ||
+      !KEY_STORE_SEGMENT_REGEX.test(segment));
+  if (invalidSegment) {
+    throw createValidationError('listSecrets: prefix contains an invalid path segment');
+  }
+  return value;
+}
+
+export function sanitizeKeyStorePutRequest(
+  req: KeyStorePutRequest,
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('putSecret: request must be an object');
+  }
+  if (!req.secret || typeof req.secret !== 'object' || Array.isArray(req.secret)) {
+    throw createValidationError('putSecret: secret must be a JSON object');
+  }
+  try {
+    stringifyLosslessJson(req.secret);
+  } catch {
+    throw createValidationError('putSecret: secret must be JSON-serializable');
+  }
+  return {
+    Name: sanitizeKeyStoreName('putSecret', req.name),
+    Secret: req.secret,
+  };
+}
+
+export function sanitizeKeyStoreGetRequest(
+  req: KeyStoreGetRequest,
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('getSecret: request must be an object');
+  }
+  return { Name: sanitizeKeyStoreName('getSecret', req.name) };
+}
+
+export function sanitizeKeyStoreListRequest(
+  req: KeyStoreListRequest = {},
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('listSecrets: request must be an object');
+  }
+  const prefix = sanitizeKeyStorePrefix(req.prefix);
+  return prefix === undefined ? {} : { Prefix: prefix };
+}
+
+export function sanitizeKeyStoreDeleteRequest(
+  req: KeyStoreDeleteRequest,
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('deleteSecret: request must be an object');
+  }
+  return { Name: sanitizeKeyStoreName('deleteSecret', req.name) };
 }
