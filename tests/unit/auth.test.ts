@@ -3,7 +3,6 @@
  */
 
 import { AuthService } from "../../src/services/auth";
-// import { OrbitportSDKError, ERROR_CODES } from "../../src/utils/errors";
 import type { OrbitportConfig, TokenStorage } from "../../src/types";
 
 // Mock token storage
@@ -17,10 +16,6 @@ const mockStorage: TokenStorage = {
 global.fetch = jest.fn();
 
 const mockConfig: OrbitportConfig = {
-  clientId: "test-client-id",
-  clientSecret: "test-client-secret",
-  authDomain: "test-auth.com",
-  audience: "https://test-api.com/api",
   apiUrl: "https://test-api.com",
   timeout: 30000,
   retryAttempts: 3,
@@ -42,10 +37,10 @@ describe("AuthService", () => {
   });
 
   describe("direct access token", () => {
-    it("returns the configured access token without reading storage or calling OAuth", async () => {
+    it("returns the configured access token without reading storage or making a network request", async () => {
       const directToken = "header.payload.signature";
       const directAuth = new AuthService(
-        { ...mockConfig, clientId: undefined, clientSecret: undefined, accessToken: directToken },
+        { ...mockConfig, accessToken: directToken },
         mockStorage,
       );
 
@@ -63,6 +58,8 @@ describe("AuthService", () => {
 
       const isValid = await authService.isTokenValid();
       expect(isValid).toBe(false);
+      await expect(authService.getValidToken()).resolves.toBeNull();
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it("should return false when token is expired", async () => {
@@ -73,6 +70,8 @@ describe("AuthService", () => {
 
       const isValid = await authService.isTokenValid();
       expect(isValid).toBe(false);
+      await expect(authService.getValidToken()).rejects.toMatchObject({ code: "TOKEN_EXPIRED" });
+      expect(fetch).not.toHaveBeenCalled();
     });
 
     it("should return true when token is valid", async () => {

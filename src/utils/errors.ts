@@ -39,12 +39,9 @@ export const ERROR_CODES = {
   AUTH_FAILED: 'AUTH_FAILED',
   INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
-  TOKEN_REFRESH_FAILED: 'TOKEN_REFRESH_FAILED',
 
   // Configuration errors
   INVALID_CONFIG: 'INVALID_CONFIG',
-  MISSING_CLIENT_ID: 'MISSING_CLIENT_ID',
-  MISSING_CLIENT_SECRET: 'MISSING_CLIENT_SECRET',
 
   // Network errors
   NETWORK_ERROR: 'NETWORK_ERROR',
@@ -65,11 +62,6 @@ export const ERROR_CODES = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   INVALID_PARAMETERS: 'INVALID_PARAMETERS',
   INVALID_REQUEST: 'INVALID_REQUEST',
-
-  // Service-specific errors
-  CTRNG_ERROR: 'CTRNG_ERROR',
-  PROVIDER_UNAVAILABLE: 'PROVIDER_UNAVAILABLE',
-  FALLBACK_FAILED: 'FALLBACK_FAILED',
 
   // KMS / JSON-RPC errors
   KMS_ERROR: 'KMS_ERROR',
@@ -161,7 +153,6 @@ export function isRetryableError(error: OrbitportSDKError): boolean {
     ERROR_CODES.CONNECTION_FAILED,
     ERROR_CODES.SERVICE_UNAVAILABLE,
     ERROR_CODES.RATE_LIMITED,
-    ERROR_CODES.PROVIDER_UNAVAILABLE,
   ];
 
   return retryableCodes.includes(error.code);
@@ -175,7 +166,6 @@ export function isAuthError(error: OrbitportSDKError): boolean {
     ERROR_CODES.AUTH_FAILED,
     ERROR_CODES.INVALID_CREDENTIALS,
     ERROR_CODES.TOKEN_EXPIRED,
-    ERROR_CODES.TOKEN_REFRESH_FAILED,
   ];
 
   return authCodes.includes(error.code);
@@ -191,7 +181,7 @@ export function formatErrorMessage(error: OrbitportSDKError): string {
   case ERROR_CODES.AUTH_FAILED:
     return 'Authentication failed. Please check your credentials.';
   case ERROR_CODES.INVALID_CREDENTIALS:
-    return 'Invalid client ID or client secret.';
+    return 'Invalid access token.';
   case ERROR_CODES.TOKEN_EXPIRED:
     return 'Authentication token has expired. Please re-authenticate.';
   case ERROR_CODES.NETWORK_ERROR:

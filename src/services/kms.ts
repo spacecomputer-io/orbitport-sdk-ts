@@ -1,7 +1,5 @@
 /**
  * Key Management Service (KMS) — JSON-RPC 2.0 client.
- *
- * Mirrors the CTRNGService construction shape (config + token factory).
  */
 
 import type {
@@ -238,17 +236,6 @@ export class KMSService {
     params: Record<string, unknown>,
     options: RequestOptions,
   ): Promise<{ result: T; metadata: ResponseMetadata }> {
-    const hasAuthentication = Boolean(
-      this.config.accessToken ||
-      (this.config.clientId && this.config.clientSecret),
-    );
-    if (!hasAuthentication) {
-      throw new OrbitportSDKError(
-        'KMS requires an access token or client credentials',
-        ERROR_CODES.AUTH_FAILED,
-      );
-    }
-
     const token = await this.getToken();
     if (!token) {
       throw new OrbitportSDKError(

@@ -11,8 +11,7 @@ import type { OrbitportConfig } from '../../src/types';
 global.fetch = jest.fn();
 
 const baseConfig: OrbitportConfig = {
-  clientId: 'cid',
-  clientSecret: 'csec',
+  accessToken: 'tok',
   apiUrl: 'https://api.example.com',
   timeout: 30000,
 };
@@ -69,7 +68,7 @@ function lastBody(): { jsonrpc: string; id: number; method: string; params: unkn
 describe('KMSService — auth gating', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('rejects requests with AUTH_FAILED when credentials are missing and never calls fetch', async () => {
+  it('rejects requests with AUTH_FAILED when the access token is missing and never calls fetch', async () => {
     const { svc } = makeService({
       config: { apiUrl: 'https://api.example.com' },
       token: null,
@@ -88,7 +87,7 @@ describe('KMSService — auth gating', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('accepts direct-token configuration without client credentials', async () => {
+  it('accepts direct-token configuration for KMS requests', async () => {
     (fetch as jest.Mock).mockImplementationOnce(rpcOk({ Schemes: [] }));
     const { svc } = makeService({
       config: { apiUrl: 'https://api.example.com', accessToken: 'header.payload.signature' },

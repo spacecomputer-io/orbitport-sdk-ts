@@ -17,6 +17,11 @@ All notable changes to this project will be documented in this file.
 - KMS alias validation now matches the gateway contract: letters, digits, dots, and hyphens only.
 - E2E tests accept `ORBITPORT_ACCESS_TOKEN` and `ORBITPORT_API_URL`.
 
+### Removed
+
+- Removed OAuth client-credentials authentication and its configuration and response types. Authentication now uses pre-issued bearer tokens; the SDK no longer acquires or refreshes tokens. Storage clearing emits `token_cleared`.
+- Removed cTRNG and its IPFS beacon support, including the SDK namespace, services, types, configuration, validation helpers, error codes, examples, and tests.
+
 ## [0.2.2] - 2026-05-12
 
 ### Fixed

@@ -4,10 +4,8 @@
 
 import type {
   OrbitportConfig,
-  CTRNGRequest,
   ValidationResult,
   RequestOptions,
-  IPFSCTRNGRequest,
   CreateKeyRequest,
   EncryptRequest,
   DecryptRequest,
@@ -32,57 +30,12 @@ export function validateConfig(
 ): ValidationResult {
   const errors: string[] = [];
 
-  // Credentials are optional - if provided, they must be valid
-  if (config.clientId !== undefined) {
-    if (
-      typeof config.clientId !== 'string' ||
-      config.clientId.trim().length === 0
-    ) {
-      errors.push('clientId must be a non-empty string');
-    }
-  }
-
-  if (config.clientSecret !== undefined) {
-    if (
-      typeof config.clientSecret !== 'string' ||
-      config.clientSecret.trim().length === 0
-    ) {
-      errors.push('clientSecret must be a non-empty string');
-    }
-  }
-
   if (config.accessToken !== undefined) {
     if (
       typeof config.accessToken !== 'string' ||
       config.accessToken.trim().length === 0
     ) {
       errors.push('accessToken must be a non-empty string');
-    }
-  }
-
-  // If one client credential is provided, both must be provided.
-  if (
-    (config.clientId && !config.clientSecret) ||
-    (!config.clientId && config.clientSecret)
-  ) {
-    errors.push('Both clientId and clientSecret must be provided together');
-  }
-
-  if (config.accessToken && (config.clientId || config.clientSecret)) {
-    errors.push('accessToken cannot be combined with clientId or clientSecret');
-  }
-
-  if (config.authDomain) {
-    if (typeof config.authDomain !== 'string' || config.authDomain.trim().length === 0) {
-      errors.push('authDomain must be a non-empty string');
-    }
-  }
-
-  if (config.audience) {
-    if (typeof config.audience !== 'string') {
-      errors.push('audience must be a string');
-    } else if (!isValidUrl(config.audience)) {
-      errors.push('audience must be a valid URL');
     }
   }
 
@@ -113,72 +66,6 @@ export function validateConfig(
     (typeof config.retryDelay !== 'number' || config.retryDelay <= 0)
   ) {
     errors.push('retryDelay must be a positive number');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}
-
-/**
- * Validates cTRNG request parameters
- */
-export function validateCTRNGRequest(
-  request: Partial<CTRNGRequest>,
-): ValidationResult {
-  const errors: string[] = [];
-
-  if (request.src && !['trng', 'rng', 'ipfs'].includes(request.src)) {
-    errors.push('src must be one of: trng, rng, ipfs');
-  }
-
-  // Validate IPFS-specific parameters only if src is "ipfs"
-  if (request.src === 'ipfs') {
-    const ipfsRequest = request as IPFSCTRNGRequest;
-
-    if (ipfsRequest.beaconPath) {
-      if (
-        typeof ipfsRequest.beaconPath !== 'string' ||
-        (!ipfsRequest.beaconPath.startsWith('/ipns/') &&
-          !ipfsRequest.beaconPath.startsWith('/ipfs/'))
-      ) {
-        errors.push(
-          'beaconPath must be a valid IPFS/IPNS path starting with /ipns/ or /ipfs/',
-        );
-      }
-    }
-
-    if (ipfsRequest.index !== undefined) {
-      if (
-        typeof ipfsRequest.index !== 'number' ||
-        !Number.isInteger(ipfsRequest.index) ||
-        ipfsRequest.index < 0
-      ) {
-        errors.push('index must be a non-negative integer');
-      }
-    }
-
-    if (ipfsRequest.block !== undefined) {
-      if (
-        ipfsRequest.block !== 'INF' &&
-        (typeof ipfsRequest.block !== 'number' ||
-          !Number.isInteger(ipfsRequest.block) ||
-          ipfsRequest.block < 0)
-      ) {
-        errors.push("block must be 'INF' or a non-negative integer");
-      }
-    }
-  } else {
-    // For non-IPFS requests, validate that IPFS-specific parameters are not provided
-    const hasIpfsParams =
-      'beaconPath' in request || 'index' in request || 'block' in request;
-
-    if (hasIpfsParams) {
-      errors.push(
-        "IPFS-specific parameters (beaconPath, index, block) can only be used with src: 'ipfs'",
-      );
-    }
   }
 
   return {
@@ -294,24 +181,11 @@ export function sanitizeConfig(
   }
 
   return {
-    clientId: config.clientId?.trim(),
-    clientSecret: config.clientSecret?.trim(),
     accessToken: config.accessToken?.trim(),
-    authDomain: config.authDomain?.trim() || getDefaultAuthDomain(),
-    audience: config.audience?.trim() || getDefaultAudience(),
     apiUrl: config.apiUrl || getDefaultApiUrl(),
     timeout: config.timeout || 30000,
     retryAttempts: config.retryAttempts || 3,
     retryDelay: config.retryDelay || 1000,
-    ipfs: {
-      gateway: 'https://ipfs.io',
-      apiUrl: 'http://65.109.2.230:5001',
-      timeout: 30000,
-      enableFallback: true,
-      defaultBeaconPath:
-        '/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f',
-      ...config.ipfs,
-    },
   };
 }
 
@@ -334,54 +208,10 @@ export function sanitizeRequestOptions(
 }
 
 /**
- * Gets default auth domain
- */
-function getDefaultAuthDomain(): string {
-  return 'auth.spacecomputer.io';
-}
-
-/**
- * Gets default audience
- */
-function getDefaultAudience(): string {
-  return 'https://op.spacecomputer.io/api';
-}
-
-/**
  * Gets default API URL
  */
 function getDefaultApiUrl(): string {
   return 'https://op.spacecomputer.io';
-}
-
-/**
- * Validates and sanitizes cTRNG request
- */
-export function sanitizeCTRNGRequest(
-  request: Partial<CTRNGRequest>,
-): CTRNGRequest {
-  const validation = validateCTRNGRequest(request);
-  if (!validation.valid) {
-    throw createValidationError(
-      validation.errors.join(', '),
-      validation.errors,
-    );
-  }
-
-  // Return appropriate request type based on src
-  if (request.src === 'ipfs') {
-    const ipfsRequest = request as IPFSCTRNGRequest;
-    return {
-      src: 'ipfs',
-      beaconPath: ipfsRequest.beaconPath,
-      block: ipfsRequest.block || 'INF',
-      index: ipfsRequest.index || 0,
-    };
-  } else {
-    return {
-      src: request.src || 'trng',
-    };
-  }
 }
 
 // ---------------------------------------------------------------------------

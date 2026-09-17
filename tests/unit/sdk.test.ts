@@ -14,8 +14,6 @@ describe('OrbitportSDK public beta surface', () => {
 
     expect(sdk.getConfig()).toMatchObject({
       accessToken: '[REDACTED]',
-      clientId: '[REDACTED]',
-      clientSecret: '[REDACTED]',
       apiUrl: 'https://op-dev.spacecomputer.io',
     });
   });
@@ -33,43 +31,14 @@ describe('OrbitportSDK public beta surface', () => {
     expect('decapsulate' in sdk.kms).toBe(false);
   });
 
-  it('switches between OAuth client credentials and a direct access token', async () => {
-    const oauthToToken = new OrbitportSDK({
-      config: { clientId: 'client-id', clientSecret: 'client-secret' },
-    });
-    oauthToToken.updateConfig({ accessToken: 'header.payload.signature' });
-    await expect(oauthToToken.auth.getValidToken()).resolves.toBe(
-      'header.payload.signature',
-    );
+  it('updates a configured access token without a network request', async () => {
+    const sdk = new OrbitportSDK({ config: { accessToken: 'old-token' } });
+    sdk.updateConfig({ accessToken: 'new-token' });
+    await expect(sdk.auth.getValidToken()).resolves.toBe('new-token');
     expect(fetch).not.toHaveBeenCalled();
-
-    const tokenToOauth = new OrbitportSDK({
-      config: { accessToken: 'header.payload.signature' },
-    });
-    tokenToOauth.updateConfig({
-      clientId: 'new-client-id',
-      clientSecret: 'new-client-secret',
-      authDomain: 'auth.example.com',
-      audience: 'https://api.example.com/api',
-    });
-    (fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        access_token: 'oauth-token',
-        expires_in: 3600,
-        token_type: 'Bearer',
-      }),
-    } as unknown as Response);
-
-    await expect(tokenToOauth.auth.getValidToken()).resolves.toBe('oauth-token');
-    expect(fetch).toHaveBeenCalledWith(
-      'https://auth.example.com/oauth/token',
-      expect.any(Object),
-    );
   });
 
-  it('applies authentication and API URL updates to KMS and cTRNG services', async () => {
+  it('applies authentication and API URL updates to the KMS service', async () => {
     const sdk = new OrbitportSDK({
       config: { apiUrl: 'https://old.example.com' },
     });
@@ -88,19 +57,8 @@ describe('OrbitportSDK public beta surface', () => {
     });
     await sdk.kms.getCapabilities();
 
-    (fetch as jest.Mock).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ service: 'trng', src: 'trng', data: '42' }),
-      headers: { get: () => null },
-    } as unknown as Response);
-    await sdk.ctrng.random({ src: 'trng' });
-
     expect((fetch as jest.Mock).mock.calls[0][0]).toBe(
       'https://new.example.com/api/v1/rpc',
-    );
-    expect((fetch as jest.Mock).mock.calls[1][0]).toBe(
-      'https://new.example.com/api/v1/services/trng?src=trng',
     );
   });
 });

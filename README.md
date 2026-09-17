@@ -1,10 +1,9 @@
 # Orbitport SDK
 
-Official TypeScript SDK for SpaceComputer Orbitport. One client, all Orbitport products — accessed as peers under a single facade.
+Official TypeScript SDK for SpaceComputer Orbitport key management and tenant-scoped JSON key storage.
 
 | Product | Namespace | What it does |
 | --- | --- | --- |
-| cTRNG | `sdk.ctrng` | Cosmic True Random Number Generation (API or IPFS beacon). |
 | KMS | `sdk.kms` | Key management, post-quantum signing and key agreement, plus a tenant-scoped JSON key store. |
 
 ## Installation
@@ -20,14 +19,9 @@ import { OrbitportSDK } from "@spacecomputer-io/orbitport-sdk-ts";
 
 const sdk = new OrbitportSDK({
   config: {
-    clientId: "your-client-id",
-    clientSecret: "your-client-secret",
+    accessToken: "your-access-token",
   },
 });
-
-// cTRNG — cosmic randomness
-const random = await sdk.ctrng.random();
-console.log(random.data.data);
 
 // KMS — create a key and sign with it
 const key = await sdk.kms.createKey({
@@ -44,37 +38,23 @@ const sig = await sdk.kms.sign({
 
 ## Features
 
-- 🛰️ **Single facade for every Orbitport product** — `sdk.ctrng`, `sdk.kms`, and future services share one config, one auth flow, one error model.
-- 🔐 **Built-in OAuth2** — automatic token acquisition, caching, and refresh.
-- 📦 **TypeScript first** — full type safety and IntelliSense across every product.
-- 🛡️ **Consistent error model** — typed `OrbitportSDKError` with stable codes across products.
+- 🔐 **Bearer-token authentication** — use a PAT from the accounts portal.
+- 📦 **TypeScript first** — full type safety and IntelliSense for all SDK methods.
+- 🛡️ **Consistent error model** — typed `OrbitportSDKError` with stable codes.
 - 💾 **Flexible storage** — browser, Node.js, and custom token stores.
-- 🌌 **cTRNG specific:** API source with automatic IPFS-beacon fallback, dual-source comparison for integrity.
-- 🔑 **KMS specific:** TRANSIT and ETHEREUM schemes over JSON-RPC 2.0, plus the tenant-scoped key store.
+- 🔑 **Key management:** TRANSIT and ETHEREUM schemes over JSON-RPC 2.0, plus the tenant-scoped key store.
 
 ## Configuration
 
-The SDK accepts either OAuth client credentials or a pre-issued bearer token. Use `accessToken` for PATs created in the accounts portal; do not combine it with `clientId` and `clientSecret`. cTRNG can also run without authentication against the public IPFS beacon.
+The SDK uses a pre-issued bearer token. Set `accessToken` to a PAT created in the accounts portal for the selected API environment.
 
 ```typescript
 interface OrbitportConfig {
-  clientId?: string; // OAuth client ID
-  clientSecret?: string; // OAuth client secret
   accessToken?: string; // Pre-issued bearer token or PAT
-  authDomain?: string; // OAuth domain (default: "auth.spacecomputer.io")
-  audience?: string; // Optional: Auth audience URL (default: "https://op.spacecomputer.io/api")
   apiUrl?: string; // Optional: API server URL
   timeout?: number; // Optional: Request timeout in ms (default: 30000)
   retryAttempts?: number; // Optional: Retry attempts (default: 3)
   retryDelay?: number; // Optional: Retry delay in ms (default: 1000)
-  ipfs?: IPFSConfig; // Optional: cTRNG-specific IPFS beacon overrides
-}
-
-interface IPFSConfig {
-  gateway?: string;
-  apiUrl?: string;
-  timeout?: number;
-  defaultBeaconPath?: string;
 }
 ```
 
@@ -89,7 +69,7 @@ const sdk = new OrbitportSDK({
 });
 ```
 
-All products return a uniform `ServiceResult<T>`:
+KMS methods return a uniform `ServiceResult<T>`:
 
 ```typescript
 interface ServiceResult<T> {
@@ -99,134 +79,15 @@ interface ServiceResult<T> {
 }
 ```
 
-## cTRNG (`sdk.ctrng`)
-
-#### `random(request?, options?)`
-
-Generates true random numbers from the best available source.
-
-**Behavior:**
-
-- If `clientId` and `clientSecret` are provided, it attempts to use the API first. If the API call fails, it automatically falls back to IPFS.
-- If credentials are not provided, it uses IPFS by default.
-- When using IPFS, it always fetches from both the gateway and the API node to compare results for integrity, exactly like the original `beacon.js` script.
-
-```typescript
-// Automatic source selection (API if configured, otherwise IPFS)
-const result = await sdk.ctrng.random();
-
-// Force use of IPFS beacon
-const ipfsResult = await sdk.ctrng.random({ src: "ipfs" });
-
-// Force use of a specific API source (if configured)
-const rngResult = await sdk.ctrng.random({ src: "rng" });
-
-// Use a custom IPFS beacon path
-const customBeaconResult = await sdk.ctrng.random({
-  src: "ipfs",
-  beaconPath: "/ipns/your-custom-beacon-cid",
-});
-
-// Select a specific cTRNG value from the beacon array
-const specificValue = await sdk.ctrng.random({
-  src: "ipfs",
-  index: 2, // Select the 3rd value (0-indexed)
-});
-
-// Get cTRNG from a specific block (traverse back through the chain)
-const blockValue = await sdk.ctrng.random({
-  src: "ipfs",
-  block: 10012, // Get from block 10012
-  index: 1, // Select the 2nd value from that block
-});
-
-// Get latest block with specific index
-const latestValue = await sdk.ctrng.random({
-  src: "ipfs",
-  block: "INF", // Latest block (default)
-  index: 0, // First value (default)
-});
-```
-
-### cTRNG response shape
-
-```typescript
-interface CTRNGResponse {
-  service: string; // "trng", "rng", or "ipfs-beacon"
-  src: string; // "trng", "rng", or "ipfs"
-  data: string; // The random value as a string
-  signature?: {
-    value: string;
-    pk: string;
-  }; // API only
-  timestamp?: string;
-  provider?: string;
-}
-```
-
-### IPFS beacon
-
-cTRNG can read from a decentralized IPFS beacon, either as the primary source (no credentials provided) or as automatic fallback when the API is unreachable. The SDK reads from both an IPFS gateway and an IPFS API node and compares the two for integrity, mirroring the upstream `beacon.js` reference.
-
-**Defaults:**
-- **Gateway**: `https://ipfs.io`
-- **API**: `https://ipfs.io`
-- **Default beacon**: `/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f`
-
-Override any of these via `OrbitportConfig.ipfs`.
-
-When `debug: true` is enabled, you'll see the dual-source comparison:
-
-```
-[OrbitportSDK] Reading from BOTH IPFS sources:
-  - Gateway: https://ipfs.io
-  - API: https://ipfs.io
-  - Path: /ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f
-
-[OrbitportSDK] ✓ Gateway and API agree on sequence/previous
-```
-
-**Array selection and block traversal:**
-
-IPFS beacons contain arrays of cTRNG values posted in batches; each beacon links to the previous block via a `previous` field, forming a chain. You can:
-
-1. Select specific values from the array via `index`
-2. Traverse back through blocks via `block`
-
-```typescript
-// Second cTRNG value from latest block
-await sdk.ctrng.random({ src: "ipfs", index: 1 });
-
-// Specific block
-await sdk.ctrng.random({ src: "ipfs", block: 10012, index: 2 });
-
-// Latest block (default)
-await sdk.ctrng.random({ src: "ipfs", block: "INF", index: 0 });
-```
-
-Notes:
-- `index` is 0-based; out-of-bounds indices wrap via modulo against the array length, so requests never fail on length.
-- `block` accepts `"INF"` (latest, default) or a numeric block. Requesting a block above the current head throws.
-- Block traversal walks the `previous` chain backwards from the latest block.
-- With `debug: true`, the SDK logs traversal and index adjustments.
-
-### Example
-
-A full walkthrough lives in [`examples/ctrng.ts`](examples/ctrng.ts). Run it with:
-
-```bash
-pnpm run examples:ctrng
-```
-
 ## KMS (`sdk.kms`)
 
-The KMS service talks JSON-RPC 2.0 to the Orbitport gateway at `POST /api/v1/rpc`. It requires API credentials. Inputs are camelCase; outputs preserve the gateway's PascalCase wire shape so server documentation can be grepped directly.
+The KMS service talks JSON-RPC 2.0 to the Orbitport gateway at `POST /api/v1/rpc`. It requires a bearer token. Inputs are camelCase; outputs preserve the gateway's PascalCase wire shape so server documentation can be grepped directly.
 
 ```typescript
 import { OrbitportSDK } from "@spacecomputer-io/orbitport-sdk-ts";
 
 const sdk = new OrbitportSDK({
-  config: { clientId: "...", clientSecret: "..." },
+  config: { accessToken: "..." },
 });
 
 const key = await sdk.kms.createKey({
@@ -339,13 +200,15 @@ Possible error codes (in addition to the standard SDK codes): `KMS_ERROR`, `KMS_
 A full walkthrough lives in [`examples/kms.ts`](examples/kms.ts). Run it with:
 
 ```bash
-ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
+ORBITPORT_ACCESS_TOKEN=... \
   pnpm run examples:kms
 ```
 
 ## Authentication (`sdk.auth`)
 
-Pass `accessToken` when you already have a PAT or bearer token. The SDK uses it directly and does not write it to token storage. For OAuth client credentials, the SDK still acquires, caches, and refreshes tokens automatically.
+Pass your PAT or bearer token as `accessToken`. The SDK uses it directly without persisting or refreshing it. Replace an expired token with `sdk.updateConfig({ accessToken: newToken })`.
+
+If `accessToken` is omitted, the SDK can read a bearer token from the configured `TokenStorage`. `clearToken()` clears that storage only; it does not clear a configured `accessToken` or revoke a token on the server. JWT expiry checks use a 60-second buffer; the server validates signatures and permissions.
 
 ```typescript
 const isValid = await sdk.auth.isTokenValid();
@@ -355,13 +218,12 @@ await sdk.auth.clearToken();
 
 ## Error handling
 
-Every product throws `OrbitportSDKError` with a typed `code` from `ERROR_CODES`. KMS additionally exposes the raw JSON-RPC error code via `error.details.jsonRpcCode`.
+SDK methods throw `OrbitportSDKError` with a typed `code` from `ERROR_CODES`. KMS additionally exposes the raw JSON-RPC error code via `error.details.jsonRpcCode`.
 
 ```typescript
 import { OrbitportSDKError, ERROR_CODES } from "@spacecomputer-io/orbitport-sdk-ts";
 
 try {
-  await sdk.ctrng.random();
   await sdk.kms.sign({ keyId, message: "hi", signingAlgorithm: "ECDSA_SHA_256" });
 } catch (error) {
   if (error instanceof OrbitportSDKError) {
@@ -400,8 +262,8 @@ ORBITPORT_ACCESS_TOKEN="..." \
 ORBITPORT_API_URL="https://op-dev.spacecomputer.io" \
   npm run test:e2e
 
-# Or use OAuth client credentials
-ORBITPORT_CLIENT_ID="your-id" ORBITPORT_CLIENT_SECRET="your-secret" npm run test:e2e
+# Or load the token and API URL from a local .env file
+node --env-file=.env node_modules/jest/bin/jest.js tests/e2e.test.ts --runInBand
 ```
 
 ## License
