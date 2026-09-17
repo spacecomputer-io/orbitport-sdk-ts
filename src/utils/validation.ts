@@ -4,20 +4,23 @@
 
 import type {
   OrbitportConfig,
-  CTRNGRequest,
   ValidationResult,
   RequestOptions,
-  IPFSCTRNGRequest,
   CreateKeyRequest,
   EncryptRequest,
   DecryptRequest,
   SignRequest,
   GenerateDataKeyRequest,
   RotateKeyRequest,
+  KeyStorePutRequest,
+  KeyStoreGetRequest,
+  KeyStoreListRequest,
+  KeyStoreDeleteRequest,
   Tag,
   PlaintextEncoding,
 } from '../types';
 import { createValidationError } from './errors';
+import { stringify as stringifyLosslessJson } from 'lossless-json';
 
 /**
  * Validates the Orbitport configuration
@@ -27,44 +30,12 @@ export function validateConfig(
 ): ValidationResult {
   const errors: string[] = [];
 
-  // Credentials are optional - if provided, they must be valid
-  if (config.clientId !== undefined) {
+  if (config.accessToken !== undefined) {
     if (
-      typeof config.clientId !== 'string' ||
-      config.clientId.trim().length === 0
+      typeof config.accessToken !== 'string' ||
+      config.accessToken.trim().length === 0
     ) {
-      errors.push('clientId must be a non-empty string');
-    }
-  }
-
-  if (config.clientSecret !== undefined) {
-    if (
-      typeof config.clientSecret !== 'string' ||
-      config.clientSecret.trim().length === 0
-    ) {
-      errors.push('clientSecret must be a non-empty string');
-    }
-  }
-
-  // If one credential is provided, both must be provided
-  if (
-    (config.clientId && !config.clientSecret) ||
-    (!config.clientId && config.clientSecret)
-  ) {
-    errors.push('Both clientId and clientSecret must be provided together');
-  }
-
-  if (config.authDomain) {
-    if (typeof config.authDomain !== 'string' || config.authDomain.trim().length === 0) {
-      errors.push('authDomain must be a non-empty string');
-    }
-  }
-
-  if (config.audience) {
-    if (typeof config.audience !== 'string') {
-      errors.push('audience must be a string');
-    } else if (!isValidUrl(config.audience)) {
-      errors.push('audience must be a valid URL');
+      errors.push('accessToken must be a non-empty string');
     }
   }
 
@@ -95,72 +66,6 @@ export function validateConfig(
     (typeof config.retryDelay !== 'number' || config.retryDelay <= 0)
   ) {
     errors.push('retryDelay must be a positive number');
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}
-
-/**
- * Validates cTRNG request parameters
- */
-export function validateCTRNGRequest(
-  request: Partial<CTRNGRequest>,
-): ValidationResult {
-  const errors: string[] = [];
-
-  if (request.src && !['trng', 'rng', 'ipfs'].includes(request.src)) {
-    errors.push('src must be one of: trng, rng, ipfs');
-  }
-
-  // Validate IPFS-specific parameters only if src is "ipfs"
-  if (request.src === 'ipfs') {
-    const ipfsRequest = request as IPFSCTRNGRequest;
-
-    if (ipfsRequest.beaconPath) {
-      if (
-        typeof ipfsRequest.beaconPath !== 'string' ||
-        (!ipfsRequest.beaconPath.startsWith('/ipns/') &&
-          !ipfsRequest.beaconPath.startsWith('/ipfs/'))
-      ) {
-        errors.push(
-          'beaconPath must be a valid IPFS/IPNS path starting with /ipns/ or /ipfs/',
-        );
-      }
-    }
-
-    if (ipfsRequest.index !== undefined) {
-      if (
-        typeof ipfsRequest.index !== 'number' ||
-        !Number.isInteger(ipfsRequest.index) ||
-        ipfsRequest.index < 0
-      ) {
-        errors.push('index must be a non-negative integer');
-      }
-    }
-
-    if (ipfsRequest.block !== undefined) {
-      if (
-        ipfsRequest.block !== 'INF' &&
-        (typeof ipfsRequest.block !== 'number' ||
-          !Number.isInteger(ipfsRequest.block) ||
-          ipfsRequest.block < 0)
-      ) {
-        errors.push("block must be 'INF' or a non-negative integer");
-      }
-    }
-  } else {
-    // For non-IPFS requests, validate that IPFS-specific parameters are not provided
-    const hasIpfsParams =
-      'beaconPath' in request || 'index' in request || 'block' in request;
-
-    if (hasIpfsParams) {
-      errors.push(
-        "IPFS-specific parameters (beaconPath, index, block) can only be used with src: 'ipfs'",
-      );
-    }
   }
 
   return {
@@ -276,23 +181,11 @@ export function sanitizeConfig(
   }
 
   return {
-    clientId: config.clientId?.trim(),
-    clientSecret: config.clientSecret?.trim(),
-    authDomain: config.authDomain?.trim() || getDefaultAuthDomain(),
-    audience: config.audience?.trim() || getDefaultAudience(),
+    accessToken: config.accessToken?.trim(),
     apiUrl: config.apiUrl || getDefaultApiUrl(),
     timeout: config.timeout || 30000,
     retryAttempts: config.retryAttempts || 3,
     retryDelay: config.retryDelay || 1000,
-    ipfs: {
-      gateway: 'https://ipfs.io',
-      apiUrl: 'http://65.109.2.230:5001',
-      timeout: 30000,
-      enableFallback: true,
-      defaultBeaconPath:
-        '/ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f',
-      ...config.ipfs,
-    },
   };
 }
 
@@ -315,71 +208,29 @@ export function sanitizeRequestOptions(
 }
 
 /**
- * Gets default auth domain
- */
-function getDefaultAuthDomain(): string {
-  return 'auth.spacecomputer.io';
-}
-
-/**
- * Gets default audience
- */
-function getDefaultAudience(): string {
-  return 'https://op.spacecomputer.io/api';
-}
-
-/**
  * Gets default API URL
  */
 function getDefaultApiUrl(): string {
   return 'https://op.spacecomputer.io';
 }
 
-/**
- * Validates and sanitizes cTRNG request
- */
-export function sanitizeCTRNGRequest(
-  request: Partial<CTRNGRequest>,
-): CTRNGRequest {
-  const validation = validateCTRNGRequest(request);
-  if (!validation.valid) {
-    throw createValidationError(
-      validation.errors.join(', '),
-      validation.errors,
-    );
-  }
-
-  // Return appropriate request type based on src
-  if (request.src === 'ipfs') {
-    const ipfsRequest = request as IPFSCTRNGRequest;
-    return {
-      src: 'ipfs',
-      beaconPath: ipfsRequest.beaconPath,
-      block: ipfsRequest.block || 'INF',
-      index: ipfsRequest.index || 0,
-    };
-  } else {
-    return {
-      src: request.src || 'trng',
-    };
-  }
-}
-
 // ---------------------------------------------------------------------------
 // KMS validation
 // ---------------------------------------------------------------------------
 
-const KMS_ALIAS_REGEX = /^[A-Za-z0-9.\-_/]{1,128}$/;
+const KMS_ALIAS_REGEX = /^[A-Za-z0-9.-]{1,128}$/;
 const VALID_KEY_SPECS = new Set([
   'AES_256_GCM96',
-  'SYMMETRIC_DEFAULT',
   'ECDSA_P256',
   'ECDSA_P384',
   'ED25519',
   'RSA_4096',
   'ECC_SECG_P256K1',
 ]);
-const VALID_KEY_USAGES = new Set(['ENCRYPT_DECRYPT', 'SIGN_VERIFY']);
+const VALID_KEY_USAGES = new Set([
+  'ENCRYPT_DECRYPT',
+  'SIGN_VERIFY',
+]);
 const VALID_SCHEMES = new Set(['TRANSIT', 'ETHEREUM']);
 const VALID_SIGNING_ALGORITHMS = new Set([
   'ECDSA_SHA_256',
@@ -406,7 +257,7 @@ export function validateKMSAlias(alias: string): void {
   }
   if (!KMS_ALIAS_REGEX.test(alias)) {
     throw createValidationError(
-      'alias must match /^[A-Za-z0-9.\\-_/]{1,128}$/ (no spaces; max 128 chars)',
+      'alias must match /^[A-Za-z0-9.-]{1,128}$/ (letters, digits, dot, or hyphen; max 128 chars)',
     );
   }
 }
@@ -448,6 +299,26 @@ export function sanitizeCreateKeyRequest(req: CreateKeyRequest): Record<string, 
   if (req.scheme !== undefined && !VALID_SCHEMES.has(req.scheme)) {
     throw createValidationError(`createKey: invalid scheme "${req.scheme}"`);
   }
+
+  const scheme = req.scheme ?? 'TRANSIT';
+  let expectedScheme = 'TRANSIT';
+  let expectedUsage = 'SIGN_VERIFY';
+  if (req.keySpec === 'AES_256_GCM96') {
+    expectedUsage = 'ENCRYPT_DECRYPT';
+  } else if (req.keySpec === 'ECC_SECG_P256K1') {
+    expectedScheme = 'ETHEREUM';
+  }
+  if (scheme !== expectedScheme) {
+    throw createValidationError(
+      `createKey: keySpec "${req.keySpec}" requires scheme "${expectedScheme}"`,
+    );
+  }
+  if (req.keyUsage !== expectedUsage) {
+    throw createValidationError(
+      `createKey: keySpec "${req.keySpec}" requires keyUsage "${expectedUsage}"`,
+    );
+  }
+
   if (req.description !== undefined && typeof req.description !== 'string') {
     throw createValidationError('createKey: description must be a string');
   }
@@ -592,6 +463,7 @@ export function sanitizeSignRequest(req: SignRequest): {
       'sign: messageType "EIP191" requires signingAlgorithm "ETHEREUM_SECP256K1"',
     );
   }
+
   return {
     keyId,
     message: req.message,
@@ -649,4 +521,102 @@ export function sanitizeRotateKeyRequest(
   }
   const keyId = requireKeyId('rotateKey', req.keyId);
   return { KeyId: keyId };
+}
+
+const KEY_STORE_SEGMENT_REGEX = /^[A-Za-z0-9._-]+$/;
+const MAX_KEY_STORE_NAME_LENGTH = 256;
+
+function sanitizeKeyStoreName(method: string, name: unknown): string {
+  if (typeof name !== 'string' || name.trim().length === 0) {
+    throw createValidationError(`${method}: name must be a non-empty string`);
+  }
+  const value = name.trim();
+  if (value.length > MAX_KEY_STORE_NAME_LENGTH) {
+    throw createValidationError(`${method}: name must be at most 256 characters`);
+  }
+  if (value.startsWith('/') || value.endsWith('/')) {
+    throw createValidationError(`${method}: name must not start or end with /`);
+  }
+  const invalidSegment = value
+    .split('/')
+    .some((segment) =>
+      segment.length === 0 ||
+      segment === '.' ||
+      segment === '..' ||
+      !KEY_STORE_SEGMENT_REGEX.test(segment));
+  if (invalidSegment) {
+    throw createValidationError(`${method}: name contains an invalid path segment`);
+  }
+  return value;
+}
+
+function sanitizeKeyStorePrefix(prefix: unknown): string | undefined {
+  if (prefix === undefined) return undefined;
+  if (typeof prefix !== 'string') {
+    throw createValidationError('listSecrets: prefix must be a string');
+  }
+  const value = prefix.trim().replace(/^\/+|\/+$/g, '');
+  if (value.length === 0) return '';
+  if (value.length > MAX_KEY_STORE_NAME_LENGTH) {
+    throw createValidationError('listSecrets: prefix must be at most 256 characters');
+  }
+  const invalidSegment = value
+    .split('/')
+    .some((segment) =>
+      segment.length === 0 ||
+      segment === '.' ||
+      segment === '..' ||
+      !KEY_STORE_SEGMENT_REGEX.test(segment));
+  if (invalidSegment) {
+    throw createValidationError('listSecrets: prefix contains an invalid path segment');
+  }
+  return value;
+}
+
+export function sanitizeKeyStorePutRequest(
+  req: KeyStorePutRequest,
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('putSecret: request must be an object');
+  }
+  if (!req.secret || typeof req.secret !== 'object' || Array.isArray(req.secret)) {
+    throw createValidationError('putSecret: secret must be a JSON object');
+  }
+  try {
+    stringifyLosslessJson(req.secret);
+  } catch {
+    throw createValidationError('putSecret: secret must be JSON-serializable');
+  }
+  return {
+    Name: sanitizeKeyStoreName('putSecret', req.name),
+    Secret: req.secret,
+  };
+}
+
+export function sanitizeKeyStoreGetRequest(
+  req: KeyStoreGetRequest,
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('getSecret: request must be an object');
+  }
+  return { Name: sanitizeKeyStoreName('getSecret', req.name) };
+}
+
+export function sanitizeKeyStoreListRequest(
+  req: KeyStoreListRequest = {},
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('listSecrets: request must be an object');
+  }
+  const prefix = sanitizeKeyStorePrefix(req.prefix);
+  return prefix === undefined ? {} : { Prefix: prefix };
+}
+
+export function sanitizeKeyStoreDeleteRequest(
+  req: KeyStoreDeleteRequest,
+): Record<string, unknown> {
+  if (!req || typeof req !== 'object') {
+    throw createValidationError('deleteSecret: request must be an object');
+  }
+  return { Name: sanitizeKeyStoreName('deleteSecret', req.name) };
 }

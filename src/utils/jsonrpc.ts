@@ -8,6 +8,12 @@
 
 import { OrbitportSDKError, ERROR_CODES, createNetworkError } from './errors';
 import type { ErrorCode } from './errors';
+import {
+  LosslessNumber,
+  isSafeNumber,
+  parse as parseLosslessJson,
+  stringify as stringifyLosslessJson,
+} from 'lossless-json';
 
 let nextId = 1;
 
@@ -92,6 +98,13 @@ export async function jsonRpcCall<TResult, TParams = Record<string, unknown>>(
   }
 
   try {
+    const requestBody = stringifyLosslessJson(envelope);
+    if (requestBody === undefined) {
+      throw new OrbitportSDKError(
+        'Invalid JSON-RPC request: failed to serialize body',
+        ERROR_CODES.INVALID_REQUEST,
+      );
+    }
     const response = await fetch(args.url, {
       method: 'POST',
       headers: {
@@ -100,7 +113,7 @@ export async function jsonRpcCall<TResult, TParams = Record<string, unknown>>(
         Accept: 'application/json',
         ...options.headers,
       },
-      body: JSON.stringify(envelope),
+      body: requestBody,
       signal: controller.signal,
     });
 
@@ -122,7 +135,11 @@ export async function jsonRpcCall<TResult, TParams = Record<string, unknown>>(
 
     let body: JsonRpcResponse<TResult>;
     try {
-      body = (await response.json()) as JsonRpcResponse<TResult>;
+      const bodyText = await response.text();
+      body = parseLosslessJson(bodyText, null, {
+        parseNumber: (value: string) =>
+          isSafeNumber(value) ? Number(value) : new LosslessNumber(value),
+      }) as JsonRpcResponse<TResult>;
     } catch {
       throw new OrbitportSDKError(
         'Invalid JSON-RPC response: failed to parse JSON body',
@@ -231,10 +248,25 @@ function mapHttpError(status: number, url: string, bodyText?: string): Orbitport
       details,
     );
   }
-  if (status >= 500) {
+  if (status === 402) {
+    // The gateway's account plugin holds credits before serving a request and
+    // rejects with 402 {"error":"insufficient_credits"} when the balance is empty.
     return new OrbitportSDKError(
-      `JSON-RPC service unavailable (HTTP ${status})${suffix}`,
-      ERROR_CODES.SERVICE_UNAVAILABLE,
+      `Orbitport credits exhausted (HTTP 402). Top up your account balance in the accounts portal.${suffix}`,
+      ERROR_CODES.INSUFFICIENT_CREDITS,
+      status,
+      details,
+    );
+  }
+  if (status >= 500) {
+    // 503 with {"error":"account_plugin_unavailable"} means the gateway could
+    // not reach the account service to authorize/credit-fence the request.
+    const accountUnavailable = body.includes('"account_plugin_unavailable"');
+    return new OrbitportSDKError(
+      accountUnavailable
+        ? `Account service temporarily unavailable; request not authorized (HTTP ${status})${suffix}`
+        : `JSON-RPC service unavailable (HTTP ${status})${suffix}`,
+      accountUnavailable ? ERROR_CODES.ACCOUNT_UNAVAILABLE : ERROR_CODES.SERVICE_UNAVAILABLE,
       status,
       details,
     );

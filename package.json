@@ -1,6 +1,7 @@
 {
   "name": "@spacecomputer-io/orbitport-sdk-ts",
   "version": "0.2.2",
+  "packageManager": "pnpm@10.33.2",
   "description": "Official TypeScript SDK for SpaceComputer Orbitport",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -36,7 +37,6 @@
     "pack:dry-run": "npm pack --dry-run",
     "publish:dry-run": "npm publish --dry-run",
     "docs": "npm run build && typedoc src/index.ts --out docs --theme default",
-    "examples:ctrng": "npm run build && npx ts-node examples/ctrng.ts",
     "examples:kms": "npm run build && npx ts-node examples/kms.ts"
   },
   "repository": {
@@ -46,17 +46,9 @@
   "keywords": [
     "spacecomputer",
     "orbitport",
-    "ctrng",
-    "rng",
     "sdk",
     "typescript",
-    "random",
     "cryptography",
-    "ipfs",
-    "beacon",
-    "true-random",
-    "quantum",
-    "entropy",
     "kms",
     "key-management",
     "encryption",
@@ -73,6 +65,7 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
+    "lossless-json": "^4.3.1",
     "tslib": "^2.8.1"
   },
   "devDependencies": {

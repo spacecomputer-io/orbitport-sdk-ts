@@ -4,13 +4,11 @@
 
 import {
   validateConfig,
-  validateCTRNGRequest,
   validateRequestOptions,
   isValidUrl,
   isValidJWT,
   isTokenExpired,
   sanitizeConfig,
-  sanitizeCTRNGRequest,
   sanitizeRequestOptions,
 } from "../../src/utils/validation";
 
@@ -18,10 +16,7 @@ describe("Validation Utilities", () => {
   describe("validateConfig", () => {
     it("should validate correct configuration", () => {
       const config = {
-        clientId: "test-client-id",
-        clientSecret: "test-client-secret",
-        authDomain: "auth.example.com",
-        audience: "https://api.example.com/api",
+        accessToken: "test-access-token",
         apiUrl: "https://api.example.com",
         timeout: 30000,
         retryAttempts: 3,
@@ -33,174 +28,33 @@ describe("Validation Utilities", () => {
       expect(result.errors).toHaveLength(0);
     });
 
-    it("should reject missing clientId when clientSecret is provided", () => {
-      const config = {
-        clientSecret: "test-client-secret",
-      };
+    it("should accept a direct access token configuration", () => {
+      const result = validateConfig({ accessToken: "header.payload.signature" });
 
-      const result = validateConfig(config);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        "Both clientId and clientSecret must be provided together"
-      );
-    });
-
-    it("should reject missing clientSecret when clientId is provided", () => {
-      const config = {
-        clientId: "test-client-id",
-      };
-
-      const result = validateConfig(config);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        "Both clientId and clientSecret must be provided together"
-      );
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
     });
 
     it("should reject invalid URLs", () => {
       const config = {
-        clientId: "test-client-id",
-        clientSecret: "test-client-secret",
-        audience: "not-a-url",
+        accessToken: "test-access-token",
         apiUrl: "also-not-a-url",
       };
 
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
-      expect(result.errors).toContain("audience must be a valid URL");
       expect(result.errors).toContain("apiUrl must be a valid URL");
     });
 
     it("should reject invalid timeout", () => {
       const config = {
-        clientId: "test-client-id",
-        clientSecret: "test-client-secret",
+        accessToken: "test-access-token",
         timeout: -1000,
       };
 
       const result = validateConfig(config);
       expect(result.valid).toBe(false);
       expect(result.errors).toContain("timeout must be a positive number");
-    });
-  });
-
-  describe("validateCTRNGRequest", () => {
-    it("should validate correct API request", () => {
-      const request = { src: "trng" as const };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it("should validate rng source", () => {
-      const request = { src: "rng" as const };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(true);
-    });
-
-    it("should validate IPFS request with all parameters", () => {
-      const request = {
-        src: "ipfs" as const,
-        beaconPath: "/ipns/test-beacon",
-        block: 10012,
-        index: 2,
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(true);
-      expect(result.errors).toHaveLength(0);
-    });
-
-    it("should validate IPFS request with INF block", () => {
-      const request = {
-        src: "ipfs" as const,
-        block: "INF" as const,
-        index: 0,
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(true);
-    });
-
-    it("should reject invalid source", () => {
-      const request = { src: "invalid" as any };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain("src must be one of: trng, rng, ipfs");
-    });
-
-    it("should reject IPFS request with invalid beacon path", () => {
-      const request = {
-        src: "ipfs" as const,
-        beaconPath: "invalid-path",
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        "beaconPath must be a valid IPFS/IPNS path starting with /ipns/ or /ipfs/"
-      );
-    });
-
-    it("should reject IPFS request with negative index", () => {
-      const request = {
-        src: "ipfs" as const,
-        index: -1,
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain("index must be a non-negative integer");
-    });
-
-    it("should reject IPFS request with non-integer index", () => {
-      const request = {
-        src: "ipfs" as const,
-        index: 1.5,
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain("index must be a non-negative integer");
-    });
-
-    it("should reject IPFS request with negative block", () => {
-      const request = {
-        src: "ipfs" as const,
-        block: -1,
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        "block must be 'INF' or a non-negative integer"
-      );
-    });
-
-    it("should reject IPFS request with non-integer block", () => {
-      const request = {
-        src: "ipfs" as const,
-        block: 1.5,
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        "block must be 'INF' or a non-negative integer"
-      );
-    });
-
-    it("should reject non-IPFS request with IPFS parameters", () => {
-      const request = {
-        src: "trng" as const,
-        beaconPath: "/ipns/test",
-        block: 10012,
-        index: 0,
-      };
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(false);
-      expect(result.errors).toContain(
-        "IPFS-specific parameters (beaconPath, index, block) can only be used with src: 'ipfs'"
-      );
-    });
-
-    it("should accept empty request", () => {
-      const request = {};
-      const result = validateCTRNGRequest(request);
-      expect(result.valid).toBe(true);
     });
   });
 
@@ -310,15 +164,11 @@ describe("Validation Utilities", () => {
   describe("sanitizeConfig", () => {
     it("should sanitize and apply defaults", () => {
       const config = {
-        clientId: "  test-client-id  ",
-        clientSecret: "  test-client-secret  ",
+        accessToken: "  test-access-token  ",
       };
 
       const result = sanitizeConfig(config);
-      expect(result.clientId).toBe("test-client-id");
-      expect(result.clientSecret).toBe("test-client-secret");
-      expect(result.authDomain).toBeDefined();
-      expect(result.audience).toBeDefined();
+      expect(result.accessToken).toBe("test-access-token");
       expect(result.apiUrl).toBeDefined();
       expect(result.timeout).toBe(30000);
       expect(result.retryAttempts).toBe(3);
@@ -327,72 +177,16 @@ describe("Validation Utilities", () => {
 
     it("should throw on invalid config", () => {
       const config = {
-        clientId: "",
-        clientSecret: "test-secret",
+        accessToken: "",
       };
 
       expect(() => sanitizeConfig(config)).toThrow();
     });
-  });
 
-  describe("sanitizeCTRNGRequest", () => {
-    it("should sanitize API request with defaults", () => {
-      const request = {};
-      const result = sanitizeCTRNGRequest(request);
-      expect(result.src).toBe("trng");
-    });
+    it("should trim and preserve a direct access token", () => {
+      const result = sanitizeConfig({ accessToken: "  header.payload.signature  " });
 
-    it("should preserve valid API src", () => {
-      const request = { src: "rng" as const };
-      const result = sanitizeCTRNGRequest(request);
-      expect(result.src).toBe("rng");
-    });
-
-    it("should sanitize IPFS request with defaults", () => {
-      const request = { src: "ipfs" as const };
-      const result = sanitizeCTRNGRequest(request);
-      expect(result.src).toBe("ipfs");
-      expect((result as any).block).toBe("INF");
-      expect((result as any).index).toBe(0);
-    });
-
-    it("should preserve IPFS parameters", () => {
-      const request = {
-        src: "ipfs" as const,
-        beaconPath: "/ipns/test-beacon",
-        block: 10012,
-        index: 2,
-      };
-      const result = sanitizeCTRNGRequest(request);
-      expect(result.src).toBe("ipfs");
-      expect((result as any).beaconPath).toBe("/ipns/test-beacon");
-      expect((result as any).block).toBe(10012);
-      expect((result as any).index).toBe(2);
-    });
-
-    it("should apply defaults for missing IPFS parameters", () => {
-      const request = {
-        src: "ipfs" as const,
-        beaconPath: "/ipns/test-beacon",
-      };
-      const result = sanitizeCTRNGRequest(request);
-      expect(result.src).toBe("ipfs");
-      expect((result as any).beaconPath).toBe("/ipns/test-beacon");
-      expect((result as any).block).toBe("INF");
-      expect((result as any).index).toBe(0);
-    });
-
-    it("should throw on invalid request", () => {
-      const request = { src: "invalid" as any };
-      expect(() => sanitizeCTRNGRequest(request)).toThrow();
-    });
-
-    it("should throw on non-IPFS request with IPFS parameters", () => {
-      const request = {
-        src: "trng" as const,
-        block: 10012,
-      };
-      expect(() => sanitizeCTRNGRequest(request)).toThrow();
+      expect(result.accessToken).toBe("header.payload.signature");
     });
   });
 

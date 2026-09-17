@@ -2,7 +2,7 @@
 //
 // Build the SDK first, then run this file with ts-node:
 //   $ pnpm build
-//   $ ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
+//   $ ORBITPORT_ACCESS_TOKEN=... \
 //       npx ts-node examples/kms.ts
 
 import { OrbitportSDK, fromBase64ToUint8Array } from "../dist/index";
@@ -10,18 +10,18 @@ import { OrbitportSDK, fromBase64ToUint8Array } from "../dist/index";
 async function main() {
   console.log("--- Orbitport KMS Example ---");
 
-  const clientId = process.env.ORBITPORT_CLIENT_ID;
-  const clientSecret = process.env.ORBITPORT_CLIENT_SECRET;
+  const accessToken = process.env.ORBITPORT_ACCESS_TOKEN;
+  const apiUrl = process.env.ORBITPORT_API_URL;
 
-  if (!clientId || !clientSecret) {
+  if (!accessToken) {
     console.log(
-      "Missing ORBITPORT_CLIENT_ID / ORBITPORT_CLIENT_SECRET — KMS requires authentication."
+      "Missing ORBITPORT_ACCESS_TOKEN — KMS requires authentication."
     );
     return;
   }
 
   const sdk = new OrbitportSDK({
-    config: { clientId, clientSecret },
+    config: { accessToken, apiUrl },
   });
 
   const stamp = Date.now();

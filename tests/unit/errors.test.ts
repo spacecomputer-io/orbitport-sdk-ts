@@ -47,14 +47,14 @@ describe("Error Handling", () => {
         error: "invalid_request",
         error_description: "Invalid request parameters",
         error_code: "INVALID_REQUEST",
-        details: { field: "client_id" },
+        details: { field: "accessToken" },
       };
 
       const error = createErrorFromAPIResponse(apiError, 400);
       expect(error.message).toBe("Invalid request parameters");
       expect(error.code).toBe("INVALID_REQUEST");
       expect(error.status).toBe(400);
-      expect(error.details).toEqual({ field: "client_id" });
+      expect(error.details).toEqual({ field: "accessToken" });
     });
 
     it("should handle missing error_code", () => {
@@ -120,12 +120,12 @@ describe("Error Handling", () => {
   describe("createConfigError", () => {
     it("should create config error", () => {
       const error = createConfigError("Invalid configuration", {
-        field: "clientId",
+        field: "accessToken",
       });
 
       expect(error.message).toBe("Invalid configuration");
       expect(error.code).toBe(ERROR_CODES.INVALID_CONFIG);
-      expect(error.details).toEqual({ field: "clientId" });
+      expect(error.details).toEqual({ field: "accessToken" });
     });
   });
 
@@ -156,10 +156,6 @@ describe("Error Handling", () => {
           ERROR_CODES.SERVICE_UNAVAILABLE
         ),
         new OrbitportSDKError("Rate limited", ERROR_CODES.RATE_LIMITED),
-        new OrbitportSDKError(
-          "Provider unavailable",
-          ERROR_CODES.PROVIDER_UNAVAILABLE
-        ),
       ];
 
       retryableErrors.forEach((error) => {
@@ -190,10 +186,6 @@ describe("Error Handling", () => {
           ERROR_CODES.INVALID_CREDENTIALS
         ),
         new OrbitportSDKError("Token expired", ERROR_CODES.TOKEN_EXPIRED),
-        new OrbitportSDKError(
-          "Token refresh failed",
-          ERROR_CODES.TOKEN_REFRESH_FAILED
-        ),
       ];
 
       authErrors.forEach((error) => {
@@ -224,7 +216,7 @@ describe("Error Handling", () => {
         },
         {
           code: ERROR_CODES.INVALID_CREDENTIALS,
-          expected: "Invalid client ID or client secret.",
+          expected: "Invalid access token.",
         },
         {
           code: ERROR_CODES.TOKEN_EXPIRED,
