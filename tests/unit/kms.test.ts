@@ -635,4 +635,53 @@ describe('KMSService — HTTP error bodies', () => {
       status: 503,
     });
   });
+
+  it('maps HTTP 402 to INSUFFICIENT_CREDITS', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: false,
+        status: 402,
+        text: async () => '{"error":"insufficient_credits"}',
+      } as unknown as Response),
+    );
+    const { svc } = makeService();
+    await expect(
+      svc.createKey({ alias: 'demo', keySpec: 'AES_256_GCM96', keyUsage: 'ENCRYPT_DECRYPT' }),
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.INSUFFICIENT_CREDITS,
+      status: 402,
+      details: { httpBody: '{"error":"insufficient_credits"}' },
+    });
+  });
+
+  it('maps HTTP 503 with account_plugin_unavailable to ACCOUNT_UNAVAILABLE', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: false,
+        status: 503,
+        text: async () => '{"error":"account_plugin_unavailable","detail":"dial failed"}',
+      } as unknown as Response),
+    );
+    const { svc } = makeService();
+    await expect(svc.getCapabilities()).rejects.toMatchObject({
+      code: ERROR_CODES.ACCOUNT_UNAVAILABLE,
+      status: 503,
+      message: expect.stringContaining('account_plugin_unavailable'),
+    });
+  });
+
+  it('maps HTTP 503 without the account marker to SERVICE_UNAVAILABLE', async () => {
+    (fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: false,
+        status: 503,
+        text: async () => 'upstream unavailable',
+      } as unknown as Response),
+    );
+    const { svc } = makeService();
+    await expect(svc.getCapabilities()).rejects.toMatchObject({
+      code: ERROR_CODES.SERVICE_UNAVAILABLE,
+      status: 503,
+    });
+  });
 });

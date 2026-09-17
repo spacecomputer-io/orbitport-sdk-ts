@@ -4,7 +4,7 @@ Official TypeScript SDK for SpaceComputer Orbitport key management and tenant-sc
 
 | Product | Namespace | What it does |
 | --- | --- | --- |
-| KMS | `sdk.kms` | Key management, post-quantum signing and key agreement, plus a tenant-scoped JSON key store. |
+| KMS | `sdk.kms` | Key management (TRANSIT and ETHEREUM schemes), plus a tenant-scoped JSON key store. |
 
 ## Installation
 
@@ -53,8 +53,6 @@ interface OrbitportConfig {
   accessToken?: string; // Pre-issued bearer token or PAT
   apiUrl?: string; // Optional: API server URL
   timeout?: number; // Optional: Request timeout in ms (default: 30000)
-  retryAttempts?: number; // Optional: Retry attempts (default: 3)
-  retryDelay?: number; // Optional: Retry delay in ms (default: 1000)
 }
 ```
 
@@ -159,7 +157,29 @@ The SDK also exports `toBase64` and `fromBase64ToUtf8` for direct use.
 
 ### ETHEREUM scheme
 
-Keys created with `scheme: "ETHEREUM"` (and `keySpec: "ECC_SECG_P256K1"`) expose an `Address` field on `KeyMetadata`. Use `signingAlgorithm: "ETHEREUM_SECP256K1"` together with `messageType: "EIP191"` for personal-sign style messages.
+Keys created with `scheme: "ETHEREUM"` (and `keySpec: "ECC_SECG_P256K1"`) expose an `Address` field on `KeyMetadata`. The key sign-only currency is Ethereum personal_sign and friends:
+
+```typescript
+const key = await sdk.kms.createKey({
+  alias: 'demo-eth',
+  keySpec: 'ECC_SECG_P256K1',
+  keyUsage: 'SIGN_VERIFY',
+  scheme: 'ETHEREUM',
+});
+console.log(key.data.KeyMetadata.Address); // checksummed 0x… address
+
+// EIP-191 personal-sign (what wallets do with signMessage)
+const sig = await sdk.kms.sign({
+  keyId: key.data.KeyMetadata.KeyId,
+  message: 'Hello, Ethereum',
+  signingAlgorithm: 'ETHEREUM_SECP256K1',
+  messageType: 'EIP191',
+});
+
+// RAW and DIGEST message types are also accepted for secp256k1 keys.
+```
+
+Ethereum keys do not support encrypt/decrypt, data keys, or rotation — the gateway rejects those combinations. Use `ETHEREUM_SECP256K1` with `EIP191` for personal-sign-style messages; `RAW` and `DIGEST` behave as they do for TRANSIT keys.
 
 ### Key store
 
@@ -232,7 +252,9 @@ try {
 }
 ```
 
-Common codes: `AUTH_FAILED`, `NETWORK_ERROR`, `TIMEOUT`, `RATE_LIMITED`, `VALIDATION_ERROR`, `API_ERROR`. KMS adds `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`.
+Common codes: `AUTH_FAILED`, `NETWORK_ERROR`, `TIMEOUT`, `RATE_LIMITED`, `VALIDATION_ERROR`, `API_ERROR`, `INSUFFICIENT_CREDITS`, `ACCOUNT_UNAVAILABLE`. KMS adds `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`.
+
+HTTP `402` maps to `INSUFFICIENT_CREDITS`: the gateway's account plugin holds credits before serving each request and your balance was empty. Top up in the accounts portal and retry. HTTP `503` carrying `account_plugin_unavailable` maps to `ACCOUNT_UNAVAILABLE`: the gateway could not reach the account service, so the request was not authorized or credit-fenced; retry later.
 
 ## Development
 
@@ -243,24 +265,28 @@ Common codes: `AUTH_FAILED`, `NETWORK_ERROR`, `TIMEOUT`, `RATE_LIMITED`, `VALIDA
 
 ### Setup
 
+The repo pins pnpm via `packageManager` — Corepack picks it up automatically:
+
 ```bash
+corepack enable
+
 # Install dependencies
-npm install
+pnpm install
 
 # Build the project
-npm run build
+pnpm run build
 ```
 
 ### Testing
 
 ```bash
 # Run all tests
-npm test
+pnpm test
 
 # Run e2e tests with a PAT against the development environment
 ORBITPORT_ACCESS_TOKEN="..." \
 ORBITPORT_API_URL="https://op-dev.spacecomputer.io" \
-  npm run test:e2e
+  pnpm run test:e2e
 
 # Or load the token and API URL from a local .env file
 node --env-file=.env node_modules/jest/bin/jest.js tests/e2e.test.ts --runInBand
@@ -273,5 +299,5 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Support
 
 - 📧 Email: support@spacecomputer.io
-- 🐛 Issues: [GitHub Issues](https://github.com/easonchai/orbitport-sdk/issues)
+- 🐛 Issues: [GitHub Issues](https://github.com/spacecomputer-io/orbitport-sdk-ts/issues)
 - 📖 Docs: [SpaceComputer Documentation](https://docs.spacecomputer.io)

@@ -248,10 +248,25 @@ function mapHttpError(status: number, url: string, bodyText?: string): Orbitport
       details,
     );
   }
-  if (status >= 500) {
+  if (status === 402) {
+    // The gateway's account plugin holds credits before serving a request and
+    // rejects with 402 {"error":"insufficient_credits"} when the balance is empty.
     return new OrbitportSDKError(
-      `JSON-RPC service unavailable (HTTP ${status})${suffix}`,
-      ERROR_CODES.SERVICE_UNAVAILABLE,
+      `Orbitport credits exhausted (HTTP 402). Top up your account balance in the accounts portal.${suffix}`,
+      ERROR_CODES.INSUFFICIENT_CREDITS,
+      status,
+      details,
+    );
+  }
+  if (status >= 500) {
+    // 503 with {"error":"account_plugin_unavailable"} means the gateway could
+    // not reach the account service to authorize/credit-fence the request.
+    const accountUnavailable = body.includes('"account_plugin_unavailable"');
+    return new OrbitportSDKError(
+      accountUnavailable
+        ? `Account service temporarily unavailable; request not authorized (HTTP ${status})${suffix}`
+        : `JSON-RPC service unavailable (HTTP ${status})${suffix}`,
+      accountUnavailable ? ERROR_CODES.ACCOUNT_UNAVAILABLE : ERROR_CODES.SERVICE_UNAVAILABLE,
       status,
       details,
     );

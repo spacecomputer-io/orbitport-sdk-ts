@@ -53,6 +53,8 @@ export const ERROR_CODES = {
   RATE_LIMITED: 'RATE_LIMITED',
   SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
   INVALID_RESPONSE: 'INVALID_RESPONSE',
+  INSUFFICIENT_CREDITS: 'INSUFFICIENT_CREDITS',
+  ACCOUNT_UNAVAILABLE: 'ACCOUNT_UNAVAILABLE',
 
   // Storage errors
   STORAGE_ERROR: 'STORAGE_ERROR',
@@ -192,6 +194,10 @@ export function formatErrorMessage(error: OrbitportSDKError): string {
     return 'Rate limit exceeded. Please wait before making another request.';
   case ERROR_CODES.SERVICE_UNAVAILABLE:
     return 'Service is temporarily unavailable. Please try again later.';
+  case ERROR_CODES.INSUFFICIENT_CREDITS:
+    return 'Orbitport credits exhausted. Top up your account balance in the accounts portal and try again.';
+  case ERROR_CODES.ACCOUNT_UNAVAILABLE:
+    return 'The account service is temporarily unavailable, so your request could not be authorized. Please try again later.';
   case ERROR_CODES.INVALID_CONFIG:
     return 'Invalid SDK configuration. Please check your settings.';
   case ERROR_CODES.KMS_KEY_NOT_FOUND:

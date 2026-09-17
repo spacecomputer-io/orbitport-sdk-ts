@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Direct bearer-token authentication through `OrbitportConfig.accessToken`, including PATs issued by the accounts portal. The token is used in memory and redacted from debug/config output.
 - Tenant-scoped JSON key-store methods under `sdk.kms.keyStore`: `put`, `get`, `list`, and `delete`.
 - Lossless parsing for JSON-RPC numbers that JavaScript cannot represent exactly. These values are returned as exported `LosslessNumber` objects.
+- Typed error handling for account/credit failures: HTTP `402` maps to the new `INSUFFICIENT_CREDITS` code and HTTP `503` with the gateway's `account_plugin_unavailable` marker maps to the new `ACCOUNT_UNAVAILABLE` code.
 
 ### Changed
 

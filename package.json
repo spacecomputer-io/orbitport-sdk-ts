@@ -49,7 +49,6 @@
     "sdk",
     "typescript",
     "cryptography",
-    "quantum",
     "kms",
     "key-management",
     "encryption",
