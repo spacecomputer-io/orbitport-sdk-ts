@@ -254,7 +254,9 @@ try {
 
 Common codes: `AUTH_FAILED`, `NETWORK_ERROR`, `TIMEOUT`, `RATE_LIMITED`, `VALIDATION_ERROR`, `API_ERROR`, `INSUFFICIENT_CREDITS`, `ACCOUNT_UNAVAILABLE`. KMS adds `KMS_ERROR`, `KMS_KEY_NOT_FOUND`, `KMS_INVALID_KEY_STATE`, `JSON_RPC_ERROR`.
 
-HTTP `402` maps to `INSUFFICIENT_CREDITS`: the gateway's account plugin holds credits before serving each request and your balance was empty. Top up in the accounts portal and retry. HTTP `503` carrying `account_plugin_unavailable` maps to `ACCOUNT_UNAVAILABLE`: the gateway could not reach the account service, so the request was not authorized or credit-fenced; retry later.
+HTTP `402` maps to `INSUFFICIENT_CREDITS`: your available balance cannot cover the request. Check your balance in the accounts portal before retrying. HTTP `503` carrying `account_plugin_unavailable` maps to `ACCOUNT_UNAVAILABLE`: the gateway could not authorize the request through the account service; retry later.
+
+The gateway parses and validates JSON-RPC requests before reserving credits. Usage is tagged by operation: `kms.CreateKey:<KeySpec>`, `kms.Sign:<SigningAlgorithm>`, or the RPC method name for other KMS and key-store calls. Capability discovery (`kms.GetCapabilities`) also goes through the credit hold. The SDK does not supply a price or operation tag. On successful execution the gateway asks the account service to settle the hold; on execution failure or timeout it requests a release.
 
 ## Development
 
