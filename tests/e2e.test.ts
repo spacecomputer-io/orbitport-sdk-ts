@@ -153,8 +153,17 @@ describe("Orbitport SDK E2E Tests", () => {
         keyUsage: "SIGN_VERIFY",
         scheme: "TRANSIT",
       });
+      const keyId = created.data.KeyMetadata.KeyId;
+      const metadata = await sdk.kms.getKeyMetadata({ keyId });
+      const publicKey = await sdk.kms.getPublicKey({
+        keyId: created.data.KeyMetadata.Alias,
+      });
+      expect(metadata.data.KeyMetadata.KeyId).toBe(keyId);
+      expect(publicKey.data.PublicKey).toContain("BEGIN PUBLIC KEY");
+      expect(metadata.data.KeyMetadata.PublicKey).toBe(publicKey.data.PublicKey);
+
       const sig = await sdk.kms.sign({
-        keyId: created.data.KeyMetadata.KeyId,
+        keyId,
         // 32-byte SHA-256 digest of empty string
         message: new Uint8Array([
           0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8,

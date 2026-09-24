@@ -276,6 +276,41 @@ describe('KMSService — createKey', () => {
   });
 });
 
+describe('KMSService — key lookup', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('gets metadata by canonical key ID and preserves the public key', async () => {
+    const metadata = { KeyId: 'kms:demo', Alias: 'demo', PublicKey: '-----BEGIN PUBLIC KEY-----\nexample\n-----END PUBLIC KEY-----' };
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ KeyMetadata: metadata }));
+    const { svc } = makeService();
+
+    const result = await svc.getKeyMetadata({ keyId: 'kms:demo' });
+
+    expect(lastBody()).toMatchObject({ method: 'kms.GetKeyMetadata', params: { KeyId: 'kms:demo' } });
+    expect(result.data.KeyMetadata).toEqual(metadata);
+  });
+
+  it('gets only the public key by raw alias', async () => {
+    const publicKey = '-----BEGIN PUBLIC KEY-----\nexample\n-----END PUBLIC KEY-----';
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ PublicKey: publicKey }));
+    const { svc } = makeService();
+
+    const result = await svc.getPublicKey({ keyId: 'demo' });
+
+    expect(lastBody()).toMatchObject({ method: 'kms.GetPublicKey', params: { KeyId: 'demo' } });
+    expect(result.data).toEqual({ PublicKey: publicKey });
+  });
+
+  it.each(['getKeyMetadata', 'getPublicKey'] as const)(
+    '%s rejects an empty key ID before a network request',
+    async (method) => {
+      const { svc } = makeService();
+      await expect(svc[method]({ keyId: '' })).rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('KMSService — encrypt', () => {
   beforeEach(() => jest.clearAllMocks());
 

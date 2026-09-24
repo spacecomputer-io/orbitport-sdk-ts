@@ -27,6 +27,8 @@ describe('OrbitportSDK public beta surface', () => {
     expect(sdk.kms.keyStore.get).toBeInstanceOf(Function);
     expect(sdk.kms.keyStore.list).toBeInstanceOf(Function);
     expect(sdk.kms.keyStore.delete).toBeInstanceOf(Function);
+    expect(sdk.kms.getKeyMetadata).toBeInstanceOf(Function);
+    expect(sdk.kms.getPublicKey).toBeInstanceOf(Function);
     expect('encapsulate' in sdk.kms).toBe(false);
     expect('decapsulate' in sdk.kms).toBe(false);
   });

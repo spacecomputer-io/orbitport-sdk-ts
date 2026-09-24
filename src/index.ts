@@ -25,6 +25,8 @@ import type {
   SDKEventHandler,
   RequestOptions,
   CreateKeyRequest,
+  GetKeyMetadataRequest,
+  GetPublicKeyRequest,
   EncryptRequest,
   DecryptRequest,
   DecryptResponseUtf8,
@@ -148,6 +150,10 @@ export class OrbitportSDK {
     return {
       createKey: (req: CreateKeyRequest, options?: RequestOptions) =>
         this.kmsService.createKey(req, options),
+      getKeyMetadata: (req: GetKeyMetadataRequest, options?: RequestOptions) =>
+        this.kmsService.getKeyMetadata(req, options),
+      getPublicKey: (req: GetPublicKeyRequest, options?: RequestOptions) =>
+        this.kmsService.getPublicKey(req, options),
       encrypt: (req: EncryptRequest, options?: RequestOptions) =>
         this.kmsService.encrypt(req, options),
       decrypt: ((

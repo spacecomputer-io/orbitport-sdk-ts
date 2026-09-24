@@ -46,7 +46,7 @@ const sig = await sdk.kms.sign({
 
 ## Configuration
 
-The SDK uses a pre-issued bearer token. Set `accessToken` to a PAT created in the accounts portal for the selected API environment.
+The SDK uses a pre-issued bearer token. Set `accessToken` to a PAT created at [accounts.spacecomputer.io](https://accounts.spacecomputer.io/) for the production API.
 
 ```typescript
 interface OrbitportConfig {
@@ -56,13 +56,13 @@ interface OrbitportConfig {
 }
 ```
 
-For the development environment, pass the PAT from `accounts-dev.spacecomputer.io` and point the SDK at `op-dev`:
+Connect to the production gateway:
 
 ```typescript
 const sdk = new OrbitportSDK({
   config: {
     accessToken: process.env.ORBITPORT_ACCESS_TOKEN,
-    apiUrl: "https://op-dev.spacecomputer.io",
+    apiUrl: "https://op.spacecomputer.io",
   },
 });
 ```
@@ -111,6 +111,8 @@ console.log(dec.data.Plaintext); // "hello kms"
 | Method | Description |
 | --- | --- |
 | `createKey({ alias, keySpec, keyUsage, scheme?, description?, tags? })` | Create a key under `TRANSIT` (default) or `ETHEREUM`. |
+| `getKeyMetadata({ keyId })` | Get tenant-scoped key metadata by canonical `kms:<alias>` ID or raw alias. |
+| `getPublicKey({ keyId })` | Get the public key of an asymmetric key by ID or alias. |
 | `encrypt({ keyId, plaintext, encoding?, encryptionAlgorithm? })` | Encrypt under a TRANSIT key. |
 | `decrypt({ ciphertextBlob, keyId?, encoding?, encryptionAlgorithm? })` | Decrypt a previously produced ciphertext. |
 | `sign({ keyId, message, signingAlgorithm, messageType? })` | Sign with a TRANSIT or ETHEREUM key. |
@@ -123,6 +125,39 @@ console.log(dec.data.Plaintext); // "hello kms"
 | `getCapabilities()` | Discover the deployed schemes and algorithms. |
 
 All methods return `Promise<ServiceResult<T>>` with `T` shaped to match the wire response.
+
+### Verify a signature outside KMS
+
+`getPublicKey` returns only the verification key. `getKeyMetadata` returns the full metadata, including `PublicKey` for asymmetric keys. Both calls require the same bearer token as other KMS operations and accept either `kms:<alias>` or the raw alias. Symmetric keys have no public key, so `getPublicKey` rejects them.
+
+```typescript
+import { verify } from "node:crypto";
+
+const keyId = "kms:demo"; // An existing ECDSA_P256 signing key
+const message = "hello orbitport";
+const signature = await sdk.kms.sign({
+  keyId,
+  message,
+  signingAlgorithm: "ECDSA_SHA_256",
+});
+const publicKey = await sdk.kms.getPublicKey({ keyId });
+
+// TRANSIT wraps a DER ECDSA signature as vault:v<version>:<base64>.
+const match = /^vault:v\d+:([A-Za-z0-9+/]+={0,2})$/.exec(signature.data.Signature);
+if (!match) throw new Error("Unexpected TRANSIT signature format");
+const valid = verify(
+  "sha256",
+  Buffer.from(message, "utf8"),
+  publicKey.data.PublicKey,
+  Buffer.from(match[1], "base64"),
+);
+console.log(valid);
+
+const metadata = await sdk.kms.getKeyMetadata({ keyId: "demo" });
+console.log(metadata.data.KeyMetadata.KeySpec, metadata.data.KeyMetadata.PublicKey);
+```
+
+The verification example is for a TRANSIT `ECDSA_P256` key using `ECDSA_SHA_256` with the default `RAW` message type. Use the matching verification algorithm and message format for other key types.
 
 ### Plaintext encoding
 
@@ -285,9 +320,8 @@ pnpm run build
 # Run all tests
 pnpm test
 
-# Run e2e tests with a PAT against the development environment
-ORBITPORT_ACCESS_TOKEN="..." \
-ORBITPORT_API_URL="https://op-dev.spacecomputer.io" \
+# Run e2e tests with a PAT and API URL for your chosen test environment
+ORBITPORT_ACCESS_TOKEN="..." ORBITPORT_API_URL="..." \
   pnpm run test:e2e
 
 # Or load the token and API URL from a local .env file

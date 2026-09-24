@@ -7,6 +7,8 @@ import type {
   ValidationResult,
   RequestOptions,
   CreateKeyRequest,
+  GetKeyMetadataRequest,
+  GetPublicKeyRequest,
   EncryptRequest,
   DecryptRequest,
   SignRequest,
@@ -344,6 +346,18 @@ function requireKeyId(method: string, keyId: unknown): string {
     throw createValidationError(`${method}: keyId must be a non-empty string`);
   }
   return keyId;
+}
+
+export function sanitizeGetKeyMetadataRequest(
+  req: GetKeyMetadataRequest,
+): Record<string, unknown> {
+  return { KeyId: requireKeyId('getKeyMetadata', req?.keyId) };
+}
+
+export function sanitizeGetPublicKeyRequest(
+  req: GetPublicKeyRequest,
+): Record<string, unknown> {
+  return { KeyId: requireKeyId('getPublicKey', req?.keyId) };
 }
 
 /**

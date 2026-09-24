@@ -9,6 +9,10 @@ import type {
   ServiceResult,
   CreateKeyRequest,
   CreateKeyResponse,
+  GetKeyMetadataRequest,
+  GetKeyMetadataResponse,
+  GetPublicKeyRequest,
+  GetPublicKeyResponse,
   EncryptRequest,
   EncryptResponse,
   DecryptRequest,
@@ -40,6 +44,8 @@ import {
 } from '../utils/base64';
 import {
   sanitizeCreateKeyRequest,
+  sanitizeGetKeyMetadataRequest,
+  sanitizeGetPublicKeyRequest,
   sanitizeEncryptRequest,
   sanitizeDecryptRequest,
   sanitizeSignRequest,
@@ -80,6 +86,24 @@ export class KMSService {
   ): Promise<ServiceResult<CreateKeyResponse>> {
     const params = sanitizeCreateKeyRequest(req);
     return this._call<CreateKeyResponse>('kms.CreateKey', params, options);
+  }
+
+  /** Returns tenant-scoped metadata for a key ID or alias. */
+  async getKeyMetadata(
+    req: GetKeyMetadataRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<GetKeyMetadataResponse>> {
+    const params = sanitizeGetKeyMetadataRequest(req);
+    return this._call<GetKeyMetadataResponse>('kms.GetKeyMetadata', params, options);
+  }
+
+  /** Returns the public key of an asymmetric key. Symmetric keys are rejected by the gateway. */
+  async getPublicKey(
+    req: GetPublicKeyRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<GetPublicKeyResponse>> {
+    const params = sanitizeGetPublicKeyRequest(req);
+    return this._call<GetPublicKeyResponse>('kms.GetPublicKey', params, options);
   }
 
   async encrypt(

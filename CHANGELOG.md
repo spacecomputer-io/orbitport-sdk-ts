@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- `sdk.kms.getKeyMetadata({ keyId })` and `sdk.kms.getPublicKey({ keyId })` for authenticated, tenant-scoped key lookup and external signature verification. Both accept canonical key IDs or raw aliases.
 - Direct bearer-token authentication through `OrbitportConfig.accessToken`, including PATs issued by the accounts portal. The token is used in memory and redacted from debug/config output.
 - Tenant-scoped JSON key-store methods under `sdk.kms.keyStore`: `put`, `get`, `list`, and `delete`.
 - Lossless parsing for JSON-RPC numbers that JavaScript cannot represent exactly. These values are returned as exported `LosslessNumber` objects.

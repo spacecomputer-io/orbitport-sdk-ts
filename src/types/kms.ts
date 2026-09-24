@@ -88,6 +88,16 @@ export interface CreateKeyRequest {
   tags?: Tag[];
 }
 
+/** Canonical `kms:<alias>` key ID or the raw alias. */
+export interface GetKeyMetadataRequest {
+  keyId: string;
+}
+
+/** Canonical `kms:<alias>` key ID or the raw alias. */
+export interface GetPublicKeyRequest {
+  keyId: string;
+}
+
 export type PlaintextEncoding = 'utf8' | 'bytes';
 
 /**
@@ -178,6 +188,14 @@ export interface CreateKeyResponse {
   KeyMetadata: KeyMetadata;
 }
 
+export interface GetKeyMetadataResponse {
+  KeyMetadata: KeyMetadata;
+}
+
+export interface GetPublicKeyResponse {
+  PublicKey: string; // Provider public-key format; TRANSIT asymmetric keys use PEM
+}
+
 export interface EncryptResponse {
   CiphertextBlob: string;
   KeyId: string;
@@ -200,7 +218,7 @@ export type DecryptResponse = DecryptResponseUtf8 | DecryptResponseBytes;
 
 export interface SignResponse {
   KeyId: string;
-  Signature: string; // base64
+  Signature: string; // TRANSIT: vault:v<version>:<base64>; ETHEREUM: provider format
   SigningAlgorithm: string;
 }
 
