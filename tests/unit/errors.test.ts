@@ -156,6 +156,7 @@ describe("Error Handling", () => {
           ERROR_CODES.SERVICE_UNAVAILABLE
         ),
         new OrbitportSDKError("Rate limited", ERROR_CODES.RATE_LIMITED),
+        new OrbitportSDKError("Account unavailable", ERROR_CODES.ACCOUNT_UNAVAILABLE),
       ];
 
       retryableErrors.forEach((error) => {

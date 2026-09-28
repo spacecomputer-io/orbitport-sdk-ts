@@ -155,6 +155,7 @@ export function isRetryableError(error: OrbitportSDKError): boolean {
     ERROR_CODES.CONNECTION_FAILED,
     ERROR_CODES.SERVICE_UNAVAILABLE,
     ERROR_CODES.RATE_LIMITED,
+    ERROR_CODES.ACCOUNT_UNAVAILABLE,
   ];
 
   return retryableCodes.includes(error.code);
