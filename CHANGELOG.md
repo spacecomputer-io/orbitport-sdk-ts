@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- Versioned public-key lookup with `getPublicKey({ keyId, version? })`, a `Version` response field, and `Sign.KeyVersion` so signatures remain verifiable after rotation.
+- Capability tags, key-agreement metadata, and encapsulation support flags on the public scheme capability type.
+- `sdk.kms.getKeyMetadata({ keyId })` and `sdk.kms.getPublicKey({ keyId })` for authenticated, tenant-scoped key lookup and external signature verification. Both accept canonical key IDs or raw aliases.
+- Direct bearer-token authentication through `OrbitportConfig.accessToken`, including PATs issued by the accounts portal. The token is used in memory and redacted from debug/config output.
+- Tenant-scoped JSON key-store methods under `sdk.kms.keyStore`: `put`, `get`, `list`, and `delete`.
+- Lossless parsing for JSON-RPC numbers that JavaScript cannot represent exactly. These values are returned as exported `LosslessNumber` objects.
+- Typed error handling for account/credit failures: HTTP `402` maps to the new `INSUFFICIENT_CREDITS` code and HTTP `503` with the gateway's `account_plugin_unavailable` marker maps to the new `ACCOUNT_UNAVAILABLE` code.
+
+### Changed
+
+- `getCapabilities()` exposes only the public `TRANSIT` and `ETHEREUM` schemes, even when a backend advertises disabled schemes.
+- Removed the deprecated `SYMMETRIC_DEFAULT` key spec from the public TypeScript union. Use `AES_256_GCM96`; this is a source-breaking change for callers still using the old literal.
+- KMS alias validation now matches the gateway contract: letters, digits, dots, and hyphens only.
+- E2E tests accept `ORBITPORT_ACCESS_TOKEN` and `ORBITPORT_API_URL`.
+
+### Removed
+
+- Removed OAuth client-credentials authentication and its configuration and response types. Authentication now uses pre-issued bearer tokens; the SDK no longer acquires or refreshes tokens. Storage clearing emits `token_cleared`.
+- Removed cTRNG and its IPFS beacon support, including the SDK namespace, services, types, configuration, validation helpers, error codes, examples, and tests.
+
 ## [0.2.2] - 2026-05-12
 
 ### Fixed

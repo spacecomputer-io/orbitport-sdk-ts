@@ -2,7 +2,7 @@
 //
 // Build the SDK first, then run this file with ts-node:
 //   $ pnpm build
-//   $ ORBITPORT_CLIENT_ID=... ORBITPORT_CLIENT_SECRET=... \
+//   $ ORBITPORT_ACCESS_TOKEN=... \
 //       npx ts-node examples/kms.ts
 
 import { OrbitportSDK, fromBase64ToUint8Array } from "../dist/index";
@@ -10,18 +10,18 @@ import { OrbitportSDK, fromBase64ToUint8Array } from "../dist/index";
 async function main() {
   console.log("--- Orbitport KMS Example ---");
 
-  const clientId = process.env.ORBITPORT_CLIENT_ID;
-  const clientSecret = process.env.ORBITPORT_CLIENT_SECRET;
+  const accessToken = process.env.ORBITPORT_ACCESS_TOKEN;
+  const apiUrl = process.env.ORBITPORT_API_URL;
 
-  if (!clientId || !clientSecret) {
+  if (!accessToken) {
     console.log(
-      "Missing ORBITPORT_CLIENT_ID / ORBITPORT_CLIENT_SECRET — KMS requires authentication."
+      "Missing ORBITPORT_ACCESS_TOKEN — KMS requires authentication."
     );
     return;
   }
 
   const sdk = new OrbitportSDK({
-    config: { clientId, clientSecret },
+    config: { accessToken, apiUrl },
   });
 
   const stamp = Date.now();
@@ -72,7 +72,12 @@ async function main() {
     signingAlgorithm: "ECDSA_SHA_256",
     messageType: "DIGEST",
   });
-  console.log("Signature (b64, truncated):", ecSig.data.Signature.slice(0, 32) + "...");
+  console.log("Signature (provider format, truncated):", ecSig.data.Signature.slice(0, 32) + "...");
+  const publicKey = await sdk.kms.getPublicKey({
+    keyId: ec.data.KeyMetadata.KeyId,
+    version: ecSig.data.KeyVersion,
+  });
+  console.log("Signing/public-key version:", ecSig.data.KeyVersion, publicKey.data.Version);
 
   // 4. ETHEREUM key — log Address, sign EIP191.
   console.log("\n[4] ETHEREUM key + EIP191");

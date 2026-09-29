@@ -6,11 +6,12 @@
  * shape so users can grep gateway docs.
  */
 
+import type { LosslessNumber } from 'lossless-json';
+
 export type Scheme = 'TRANSIT' | 'ETHEREUM';
 
 export type KeySpec =
   | 'AES_256_GCM96'
-  | 'SYMMETRIC_DEFAULT' // legacy / op-dev only
   | 'ECDSA_P256'
   | 'ECDSA_P384'
   | 'ED25519'
@@ -54,12 +55,20 @@ export interface KeyMetadata {
 }
 
 export interface SchemeCapability {
-  Scheme: string;
-  KeySpecs: string[];
-  KeyUsages: string[];
-  EncryptionAlgorithms: string[];
-  DataKeySpecs: string[];
-  SigningCapabilities: { SigningAlgorithm: string; MessageTypes: string[] }[];
+  Scheme: Scheme;
+  KeySpecs: KeySpec[];
+  KeyUsages: KeyUsage[];
+  EncryptionAlgorithms: EncryptionAlgorithm[];
+  DataKeySpecs: DataKeySpec[];
+  SigningCapabilities: {
+    SigningAlgorithm: SigningAlgorithm;
+    MessageTypes: MessageType[];
+    Tags: string[];
+  }[];
+  KeyAgreementCapabilities: { KeyAgreementAlgorithm: string; Tags: string[] }[];
+  SupportsEncapsulate: boolean;
+  SupportsDecapsulate: boolean;
+  Tags: string[];
   SupportsEncrypt: boolean;
   SupportsDecrypt: boolean;
   SupportsGenerateDataKey: boolean;
@@ -85,6 +94,18 @@ export interface CreateKeyRequest {
    * field must be present on the wire).
    */
   tags?: Tag[];
+}
+
+/** Canonical `kms:<alias>` key ID or the raw alias. */
+export interface GetKeyMetadataRequest {
+  keyId: string;
+}
+
+/** Canonical `kms:<alias>` key ID or the raw alias. */
+export interface GetPublicKeyRequest {
+  keyId: string;
+  /** Positive uint32 version; omit for the current public key. */
+  version?: number;
 }
 
 export type PlaintextEncoding = 'utf8' | 'bytes';
@@ -146,12 +167,44 @@ export interface RotateKeyRequest {
   keyId: string;
 }
 
+export type JsonPrimitive = string | number | boolean | null | LosslessNumber;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export interface KeyStorePutRequest {
+  name: string;
+  secret: JsonObject;
+}
+
+export interface KeyStoreGetRequest {
+  name: string;
+}
+
+export interface KeyStoreListRequest {
+  prefix?: string;
+}
+
+export interface KeyStoreDeleteRequest {
+  name: string;
+}
+
 // ---------------------------------------------------------------------------
 // Outputs (PascalCase wire shape)
 // ---------------------------------------------------------------------------
 
 export interface CreateKeyResponse {
   KeyMetadata: KeyMetadata;
+}
+
+export interface GetKeyMetadataResponse {
+  KeyMetadata: KeyMetadata;
+}
+
+export interface GetPublicKeyResponse {
+  PublicKey: string; // Provider public-key format; TRANSIT asymmetric keys use PEM
+  Version: number;
 }
 
 export interface EncryptResponse {
@@ -176,7 +229,9 @@ export type DecryptResponse = DecryptResponseUtf8 | DecryptResponseBytes;
 
 export interface SignResponse {
   KeyId: string;
-  Signature: string; // base64
+  /** Version used to sign; pass to getPublicKey when verifying. */
+  KeyVersion: number;
+  Signature: string; // TRANSIT: vault:v<version>:<base64>; ETHEREUM: provider format
   SigningAlgorithm: string;
 }
 
@@ -188,6 +243,24 @@ export interface GenerateDataKeyResponse {
 
 export interface RotateKeyResponse {
   KeyMetadata: KeyMetadata;
+}
+
+export interface KeyStorePutResponse {
+  Name: string;
+  Version: number;
+}
+
+export interface KeyStoreGetResponse {
+  Name: string;
+  Secret: JsonObject;
+}
+
+export interface KeyStoreListResponse {
+  Names: string[];
+}
+
+export interface KeyStoreDeleteResponse {
+  Name: string;
 }
 
 export interface GetCapabilitiesResponse {

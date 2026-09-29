@@ -11,9 +11,8 @@ export * from "./utils/retry";
 export * from "./utils/validation";
 
 export { AuthService } from "./services/auth";
-export { CTRNGService } from "./services/ctrng";
-export { BeaconService } from "./services/ipfs";
 export { KMSService } from "./services/kms";
+export { LosslessNumber, isLosslessNumber } from "lossless-json";
 export {
   toBase64,
   fromBase64ToUtf8,
@@ -24,9 +23,10 @@ import type {
   OrbitportConfig,
   SDKInitOptions,
   SDKEventHandler,
-  CTRNGRequest,
   RequestOptions,
   CreateKeyRequest,
+  GetKeyMetadataRequest,
+  GetPublicKeyRequest,
   EncryptRequest,
   DecryptRequest,
   DecryptResponseUtf8,
@@ -35,10 +35,12 @@ import type {
   SignRequest,
   GenerateDataKeyRequest,
   RotateKeyRequest,
+  KeyStorePutRequest,
+  KeyStoreGetRequest,
+  KeyStoreListRequest,
+  KeyStoreDeleteRequest,
 } from "./types";
 import { AuthService } from "./services/auth";
-import { CTRNGService } from "./services/ctrng";
-import { BeaconService } from "./services/ipfs";
 import { KMSService } from "./services/kms";
 import { createDefaultStorage } from "./storage";
 import { sanitizeConfig } from "./utils/validation";
@@ -46,9 +48,8 @@ import { sanitizeConfig } from "./utils/validation";
 /**
  * Main Orbitport SDK class.
  *
- * Single facade over every Orbitport product. Each product is a peer
- * namespace under the same client: `sdk.ctrng`, `sdk.kms`, etc. They share
- * configuration, authentication, and the `OrbitportSDKError` model.
+ * Provides key management through `sdk.kms` and authentication through
+ * `sdk.auth`, with shared configuration and the `OrbitportSDKError` model.
  *
  * @example
  * ```typescript
@@ -56,13 +57,9 @@ import { sanitizeConfig } from "./utils/validation";
  *
  * const sdk = new OrbitportSDK({
  *   config: {
- *     clientId: 'your-client-id',
- *     clientSecret: 'your-client-secret',
+ *     accessToken: 'your-access-token',
  *   },
  * });
- *
- * // cTRNG — cosmic randomness
- * const random = await sdk.ctrng.random();
  *
  * // KMS — create a key and sign with it
  * const key = await sdk.kms.createKey({
@@ -80,8 +77,6 @@ import { sanitizeConfig } from "./utils/validation";
 export class OrbitportSDK {
   private config: OrbitportConfig;
   private authService: AuthService;
-  private ctrngService: CTRNGService;
-  private beaconService: BeaconService;
   private kmsService: KMSService;
   private debug: boolean;
 
@@ -106,15 +101,6 @@ export class OrbitportSDK {
       this.debug
     );
 
-    this.beaconService = new BeaconService(this.config.ipfs || {}, this.debug);
-
-    this.ctrngService = new CTRNGService(
-      this.config,
-      () => this.authService.getValidToken(),
-      this.beaconService,
-      this.debug
-    );
-
     this.kmsService = new KMSService(
       this.config,
       () => this.authService.getValidToken(),
@@ -124,76 +110,16 @@ export class OrbitportSDK {
     if (this.debug) {
       console.log("[OrbitportSDK] Initialized with config:", {
         ...this.config,
-        clientId: "[REDACTED]",
-        clientSecret: "[REDACTED]",
+        accessToken: "[REDACTED]",
       });
     }
   }
 
   /**
-   * cTRNG (cosmic True Random Number Generator) service
-   *
-   * @example
-   * ```typescript
-   * // Generate random data (API first if credentials provided, then IPFS fallback)
-   * const result = await sdk.ctrng.random();
-   *
-   * // Generate random data with specific API source
-   * const result = await sdk.ctrng.random({ src: 'rng' });
-   *
-   * // Generate random data from IPFS beacon only
-   * const result = await sdk.ctrng.random({ src: 'ipfs' });
-   *
-   * // Generate random data from specific IPFS beacon
-   * const result = await sdk.ctrng.random({
-   *   src: 'ipfs',
-   *   beaconPath: '/ipns/your-beacon-cid'
-   * });
-   *
-   * // Generate random data from specific cTRNG value in beacon array
-   * const result = await sdk.ctrng.random({
-   *   src: 'ipfs',
-   *   index: 2 // Select the 3rd value (0-based)
-   * });
-   *
-   * // Generate random data from specific block with specific index
-   * const result = await sdk.ctrng.random({
-   *   src: 'ipfs',
-   *   block: 10012, // Traverse to block 10012
-   *   index: 1 // Select the 2nd value from that block
-   * });
-   * ```
-   */
-  get ctrng() {
-    return {
-      /**
-       * Generates true random numbers using cosmic sources
-       *
-       * Behavior:
-       * - If API credentials provided: tries API first, falls back to IPFS
-       * - If no API credentials: uses IPFS only
-       * - IPFS always reads from both gateway and API sources and compares them
-       * - Returns the selected cTRNG value from the beacon array (default: first value)
-       *
-       * @param request - Request parameters
-       *   - src: "trng", "rng", or "ipfs" (source selection)
-       *   - For IPFS requests (src: "ipfs"):
-       *     - beaconPath: Custom IPFS beacon path
-       *     - block: Block number to traverse to ("INF" for latest, default)
-       *     - index: Index of cTRNG value to select from beacon array (0-based, uses modulo if out of bounds)
-       * @param options - Request options (timeout, retries, headers)
-       * @returns Promise resolving to ServiceResult with CTRNGResponse
-       */
-      random: (request?: Partial<CTRNGRequest>, options?: RequestOptions) =>
-        this.ctrngService.random(request, options),
-    };
-  }
-
-  /**
    * Key Management Service (KMS)
    *
-   * Talks JSON-RPC 2.0 to the gateway at `/api/v1/rpc`. Requires API
-   * credentials. Inputs are camelCase; outputs preserve the PascalCase
+   * Talks JSON-RPC 2.0 to the gateway at `/api/v1/rpc`. Requires a bearer
+   * token. Inputs are camelCase; outputs preserve the PascalCase
    * wire shape.
    *
    * @example
@@ -224,6 +150,10 @@ export class OrbitportSDK {
     return {
       createKey: (req: CreateKeyRequest, options?: RequestOptions) =>
         this.kmsService.createKey(req, options),
+      getKeyMetadata: (req: GetKeyMetadataRequest, options?: RequestOptions) =>
+        this.kmsService.getKeyMetadata(req, options),
+      getPublicKey: (req: GetPublicKeyRequest, options?: RequestOptions) =>
+        this.kmsService.getPublicKey(req, options),
       encrypt: (req: EncryptRequest, options?: RequestOptions) =>
         this.kmsService.encrypt(req, options),
       decrypt: ((
@@ -241,6 +171,16 @@ export class OrbitportSDK {
         this.kmsService.generateDataKey(req, options),
       rotateKey: (req: RotateKeyRequest, options?: RequestOptions) =>
         this.kmsService.rotateKey(req, options),
+      keyStore: {
+        put: (req: KeyStorePutRequest, options?: RequestOptions) =>
+          this.kmsService.putSecret(req, options),
+        get: (req: KeyStoreGetRequest, options?: RequestOptions) =>
+          this.kmsService.getSecret(req, options),
+        list: (req: KeyStoreListRequest = {}, options?: RequestOptions) =>
+          this.kmsService.listSecrets(req, options),
+        delete: (req: KeyStoreDeleteRequest, options?: RequestOptions) =>
+          this.kmsService.deleteSecret(req, options),
+      },
       getCapabilities: (options?: RequestOptions) =>
         this.kmsService.getCapabilities(options),
     };
@@ -269,7 +209,7 @@ export class OrbitportSDK {
       isTokenValid: () => this.authService.isTokenValid(),
 
       /**
-       * Gets token information without refreshing
+       * Gets token information
        */
       getTokenInfo: () => this.authService.getTokenInfo(),
 
@@ -293,30 +233,24 @@ export class OrbitportSDK {
    * @example
    * ```typescript
    * sdk.updateConfig({
-   *   environment: 'staging',
    *   timeout: 60000,
-   *   ipfs: {
-   *     gateway: 'https://gateway.pinata.cloud',
-   *     apiUrl: 'https://api.pinata.cloud'
-   *   }
    * });
    * ```
    */
   updateConfig(newConfig: Partial<OrbitportConfig>): void {
-    const updatedConfig = sanitizeConfig({ ...this.config, ...newConfig });
+    const mergedConfig: Partial<OrbitportConfig> = {
+      ...this.config,
+      ...newConfig,
+    };
+    const updatedConfig = sanitizeConfig(mergedConfig);
     this.config = updatedConfig;
     this.authService.updateConfig(updatedConfig);
-
-    // Update IPFS configuration if provided
-    if (newConfig.ipfs) {
-      this.ctrngService.updateIPFSConfig(newConfig.ipfs);
-      this.beaconService.updateConfig(newConfig.ipfs);
-    }
+    this.kmsService.updateConfig(updatedConfig);
 
     if (this.debug) {
       console.log("[OrbitportSDK] Configuration updated:", {
         ...updatedConfig,
-        clientSecret: "[REDACTED]",
+        accessToken: "[REDACTED]",
       });
     }
   }
@@ -358,14 +292,12 @@ export class OrbitportSDK {
    *
    * @returns Current configuration object
    */
-  getConfig(): Omit<OrbitportConfig, "clientSecret"> & {
-    clientId: "[REDACTED]";
-    clientSecret: "[REDACTED]";
+  getConfig(): Omit<OrbitportConfig, "accessToken"> & {
+    accessToken: "[REDACTED]";
   } {
     return {
       ...this.config,
-      clientId: "[REDACTED]",
-      clientSecret: "[REDACTED]",
+      accessToken: "[REDACTED]",
     };
   }
 }
@@ -381,8 +313,7 @@ export class OrbitportSDK {
  * import { createOrbitportSDK } from '@spacecomputer-io/orbitport-sdk-ts';
  *
  * const sdk = createOrbitportSDK({
- *   clientId: 'your-client-id',
- *   clientSecret: 'your-client-secret'
+ *   accessToken: 'your-access-token'
  * });
  * ```
  */
