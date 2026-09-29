@@ -97,7 +97,7 @@ export class KMSService {
     return this._call<GetKeyMetadataResponse>('kms.GetKeyMetadata', params, options);
   }
 
-  /** Returns the public key of an asymmetric key. Symmetric keys are rejected by the gateway. */
+  /** Returns the current or requested version of an asymmetric public key. */
   async getPublicKey(
     req: GetPublicKeyRequest,
     options: RequestOptions = {},

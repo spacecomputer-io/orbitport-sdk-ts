@@ -292,14 +292,36 @@ describe('KMSService — key lookup', () => {
 
   it('gets only the public key by raw alias', async () => {
     const publicKey = '-----BEGIN PUBLIC KEY-----\nexample\n-----END PUBLIC KEY-----';
-    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ PublicKey: publicKey }));
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ PublicKey: publicKey, Version: 2 }));
     const { svc } = makeService();
 
     const result = await svc.getPublicKey({ keyId: 'demo' });
 
     expect(lastBody()).toMatchObject({ method: 'kms.GetPublicKey', params: { KeyId: 'demo' } });
-    expect(result.data).toEqual({ PublicKey: publicKey });
+    expect(result.data).toEqual({ PublicKey: publicKey, Version: 2 });
+    expect(lastBody().params).toEqual({ KeyId: 'demo' });
+    const version: number = result.data.Version;
+    expect(version).toBe(2);
   });
+
+  it.each([1, 2, 4294967295])('sends public-key version %s unchanged', async (version) => {
+    (fetch as jest.Mock).mockImplementationOnce(rpcOk({ PublicKey: 'pem', Version: version }));
+    const { svc } = makeService();
+    const request = { keyId: 'kms:demo', version };
+    const result = await svc.getPublicKey(request);
+    expect(lastBody().params).toEqual({ KeyId: 'kms:demo', Version: version });
+    expect(result.data).toEqual({ PublicKey: 'pem', Version: version });
+  });
+
+  it.each([0, -1, 1.5, 4294967296, NaN, Infinity, '1', null])(
+    'rejects invalid public-key version %s before fetch', async (version) => {
+      const { svc } = makeService();
+      const request = { keyId: 'demo', version };
+      await expect(svc.getPublicKey(request as Parameters<typeof svc.getPublicKey>[0]))
+        .rejects.toMatchObject({ code: ERROR_CODES.VALIDATION_ERROR });
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(['getKeyMetadata', 'getPublicKey'] as const)(
     '%s rejects an empty key ID before a network request',
@@ -423,10 +445,12 @@ describe('KMSService — sign', () => {
 
   it('signs a message with default messageType "RAW" and base64-encodes the message', async () => {
     (fetch as jest.Mock).mockImplementationOnce(
-      rpcOk({ KeyId: 'k1', Signature: 'sig', SigningAlgorithm: 'ECDSA_SHA_256' }),
+      rpcOk({ KeyId: 'k1', Signature: 'sig', SigningAlgorithm: 'ECDSA_SHA_256', KeyVersion: 2 }),
     );
     const { svc } = makeService();
-    await svc.sign({ keyId: 'k1', message: 'hi', signingAlgorithm: 'ECDSA_SHA_256' });
+    const result = await svc.sign({ keyId: 'k1', message: 'hi', signingAlgorithm: 'ECDSA_SHA_256' });
+    const keyVersion: number = result.data.KeyVersion;
+    expect(keyVersion).toBe(2);
     const body = lastBody();
     const params = body.params as { Message: string; MessageType: string };
     expect(params.MessageType).toBe('RAW');
@@ -511,7 +535,11 @@ describe('KMSService — rotateKey + getCapabilities', () => {
             KeyUsages: ['ENCRYPT_DECRYPT'],
             EncryptionAlgorithms: ['AES_256_GCM96'],
             DataKeySpecs: ['AES_256'],
-            SigningCapabilities: [],
+            SigningCapabilities: [{ SigningAlgorithm: 'ECDSA_SHA_256', MessageTypes: ['RAW', 'DIGEST'], Tags: [] }],
+            KeyAgreementCapabilities: [],
+            SupportsEncapsulate: false,
+            SupportsDecapsulate: false,
+            Tags: [],
             SupportsEncrypt: true,
             SupportsDecrypt: true,
             SupportsGenerateDataKey: true,
@@ -519,11 +547,17 @@ describe('KMSService — rotateKey + getCapabilities', () => {
           },
           { Scheme: 'ETHEREUM' },
           { Scheme: 'INTERNAL_DISABLED' },
+          { Scheme: 'PQC', Tags: ['experimental'] },
         ],
       }),
     );
     const { svc } = makeService();
     const res = await svc.getCapabilities();
+    expect(res.data.Schemes[0].SigningCapabilities[0].Tags).toEqual([]);
+    expect(res.data.Schemes[0].Tags).toEqual([]);
+    expect(res.data.Schemes[0].KeyAgreementCapabilities).toEqual([]);
+    expect(res.data.Schemes[0].SupportsEncapsulate).toBe(false);
+    expect(res.data.Schemes[0].SupportsDecapsulate).toBe(false);
     expect(res.data.Schemes.map((scheme) => scheme.Scheme)).toEqual([
       'TRANSIT',
       'ETHEREUM',

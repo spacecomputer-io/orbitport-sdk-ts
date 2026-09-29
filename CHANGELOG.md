@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- Versioned public-key lookup with `getPublicKey({ keyId, version? })`, a `Version` response field, and `Sign.KeyVersion` so signatures remain verifiable after rotation.
+- Capability tags, key-agreement metadata, and encapsulation support flags on the public scheme capability type.
 - `sdk.kms.getKeyMetadata({ keyId })` and `sdk.kms.getPublicKey({ keyId })` for authenticated, tenant-scoped key lookup and external signature verification. Both accept canonical key IDs or raw aliases.
 - Direct bearer-token authentication through `OrbitportConfig.accessToken`, including PATs issued by the accounts portal. The token is used in memory and redacted from debug/config output.
 - Tenant-scoped JSON key-store methods under `sdk.kms.keyStore`: `put`, `get`, `list`, and `delete`.

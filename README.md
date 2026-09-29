@@ -112,7 +112,7 @@ console.log(dec.data.Plaintext); // "hello kms"
 | --- | --- |
 | `createKey({ alias, keySpec, keyUsage, scheme?, description?, tags? })` | Create a key under `TRANSIT` (default) or `ETHEREUM`. |
 | `getKeyMetadata({ keyId })` | Get tenant-scoped key metadata by canonical `kms:<alias>` ID or raw alias. |
-| `getPublicKey({ keyId })` | Get the public key of an asymmetric key by ID or alias. |
+| `getPublicKey({ keyId, version? })` | Get the current or a historical asymmetric public key and its `Version` by ID or alias. |
 | `encrypt({ keyId, plaintext, encoding?, encryptionAlgorithm? })` | Encrypt under a TRANSIT key. |
 | `decrypt({ ciphertextBlob, keyId?, encoding?, encryptionAlgorithm? })` | Decrypt a previously produced ciphertext. |
 | `sign({ keyId, message, signingAlgorithm, messageType? })` | Sign with a TRANSIT or ETHEREUM key. |
@@ -128,7 +128,7 @@ All methods return `Promise<ServiceResult<T>>` with `T` shaped to match the wire
 
 ### Verify a signature outside KMS
 
-`getPublicKey` returns only the verification key. `getKeyMetadata` returns the full metadata, including `PublicKey` for asymmetric keys. Both calls require the same bearer token as other KMS operations and accept either `kms:<alias>` or the raw alias. Symmetric keys have no public key, so `getPublicKey` rejects them.
+`getPublicKey` returns the verification key and its `Version`. Omit `version` for the current key, or pass the signature's `KeyVersion` to verify with the correct key after rotation. An explicit version must be an integer from `1` to `4294967295`. `getKeyMetadata` returns the full metadata, including `PublicKey` for asymmetric keys. Both calls require the same bearer token as other KMS operations and accept either `kms:<alias>` or the raw alias. Symmetric keys have no public key, so `getPublicKey` rejects them.
 
 ```typescript
 import { verify } from "node:crypto";
@@ -140,7 +140,10 @@ const signature = await sdk.kms.sign({
   message,
   signingAlgorithm: "ECDSA_SHA_256",
 });
-const publicKey = await sdk.kms.getPublicKey({ keyId });
+const publicKey = await sdk.kms.getPublicKey({
+  keyId,
+  version: signature.data.KeyVersion,
+});
 
 // TRANSIT wraps a DER ECDSA signature as vault:v<version>:<base64>.
 const match = /^vault:v\d+:([A-Za-z0-9+/]+={0,2})$/.exec(signature.data.Signature);

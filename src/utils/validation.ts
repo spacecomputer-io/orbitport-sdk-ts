@@ -357,7 +357,16 @@ export function sanitizeGetKeyMetadataRequest(
 export function sanitizeGetPublicKeyRequest(
   req: GetPublicKeyRequest,
 ): Record<string, unknown> {
-  return { KeyId: requireKeyId('getPublicKey', req?.keyId) };
+  const params: Record<string, unknown> = {
+    KeyId: requireKeyId('getPublicKey', req?.keyId),
+  };
+  if (req.version !== undefined) {
+    if (!Number.isInteger(req.version) || req.version < 1 || req.version > 0xffffffff) {
+      throw createValidationError('getPublicKey: version must be an integer between 1 and 4294967295');
+    }
+    params.Version = req.version;
+  }
+  return params;
 }
 
 /**

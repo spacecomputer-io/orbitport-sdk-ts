@@ -176,6 +176,35 @@ describe("Orbitport SDK E2E Tests", () => {
       expect(sig.data.Signature.length).toBeGreaterThan(0);
     });
 
+    it("verifies an earlier signature with its historical public key after rotation", async () => {
+      const { verify } = await import("node:crypto");
+      const alias = `sdk-e2e-${stamp}-history`;
+      const created = await sdk.kms.createKey({
+        alias, keySpec: "ECDSA_P256", keyUsage: "SIGN_VERIFY", scheme: "TRANSIT",
+        tags: [{ TagKey: "purpose", TagValue: "sdk-e2e" }],
+      });
+      const keyId = created.data.KeyMetadata.KeyId;
+      const byAlias = await sdk.kms.getKeyMetadata({ keyId: alias });
+      const byId = await sdk.kms.getKeyMetadata({ keyId });
+      expect(byAlias.data).toEqual(byId.data);
+      const message = "verify after rotation";
+      const sig = await sdk.kms.sign({ keyId, message, signingAlgorithm: "ECDSA_SHA_256" });
+      expect(sig.data.KeyVersion).toBe(created.data.KeyMetadata.PrimaryVersion);
+      const rotated = await sdk.kms.rotateKey({ keyId });
+      expect(rotated.data.KeyMetadata.PrimaryVersion).toBe(sig.data.KeyVersion + 1);
+      const historical = await sdk.kms.getPublicKey({ keyId: alias, version: sig.data.KeyVersion });
+      const current = await sdk.kms.getPublicKey({ keyId });
+      expect(historical.data.Version).toBe(sig.data.KeyVersion);
+      expect(current.data.Version).toBe(rotated.data.KeyMetadata.PrimaryVersion);
+      expect(historical.data.PublicKey).not.toBe(current.data.PublicKey);
+      const match = /^vault:v(\d+):([A-Za-z0-9+/]+={0,2})$/.exec(sig.data.Signature);
+      expect(match).not.toBeNull();
+      expect(Number(match![1])).toBe(sig.data.KeyVersion);
+      expect(verify("sha256", Buffer.from(message), historical.data.PublicKey, Buffer.from(match![2], "base64"))).toBe(true);
+      const next = await sdk.kms.sign({ keyId, message, signingAlgorithm: "ECDSA_SHA_256" });
+      expect(next.data.KeyVersion).toBe(current.data.Version);
+    });
+
     it("creates an Ethereum key with an Address and signs an EIP-191 message", async () => {
       const created = await sdk.kms.createKey({
         alias: `sdk-e2e-${stamp}-eth`,
@@ -215,6 +244,12 @@ describe("Orbitport SDK E2E Tests", () => {
       });
       expect(dk.data.Plaintext.length).toBeGreaterThan(0);
       expect(dk.data.CiphertextBlob.length).toBeGreaterThan(0);
+      const unwrapped = await sdk.kms.decrypt({
+        keyId,
+        ciphertextBlob: dk.data.CiphertextBlob,
+        encoding: "bytes",
+      });
+      expect(Buffer.from(unwrapped.data.Plaintext).toString("base64")).toBe(dk.data.Plaintext);
     });
 
     it("rotates a key and bumps its PrimaryVersion", async () => {
@@ -231,7 +266,7 @@ describe("Orbitport SDK E2E Tests", () => {
       const before = await sdk.kms.rotateKey({ keyId });
       const v1 = before.data.KeyMetadata.PrimaryVersion;
       const after = await sdk.kms.rotateKey({ keyId });
-      expect(after.data.KeyMetadata.PrimaryVersion).toBeGreaterThan(v1);
+      expect(after.data.KeyMetadata.PrimaryVersion).toBe(v1 + 1);
     });
 
     it("puts, gets, lists, and deletes a disposable key-store entry", async () => {

@@ -60,7 +60,15 @@ export interface SchemeCapability {
   KeyUsages: KeyUsage[];
   EncryptionAlgorithms: EncryptionAlgorithm[];
   DataKeySpecs: DataKeySpec[];
-  SigningCapabilities: { SigningAlgorithm: SigningAlgorithm; MessageTypes: MessageType[] }[];
+  SigningCapabilities: {
+    SigningAlgorithm: SigningAlgorithm;
+    MessageTypes: MessageType[];
+    Tags: string[];
+  }[];
+  KeyAgreementCapabilities: { KeyAgreementAlgorithm: string; Tags: string[] }[];
+  SupportsEncapsulate: boolean;
+  SupportsDecapsulate: boolean;
+  Tags: string[];
   SupportsEncrypt: boolean;
   SupportsDecrypt: boolean;
   SupportsGenerateDataKey: boolean;
@@ -96,6 +104,8 @@ export interface GetKeyMetadataRequest {
 /** Canonical `kms:<alias>` key ID or the raw alias. */
 export interface GetPublicKeyRequest {
   keyId: string;
+  /** Positive uint32 version; omit for the current public key. */
+  version?: number;
 }
 
 export type PlaintextEncoding = 'utf8' | 'bytes';
@@ -194,6 +204,7 @@ export interface GetKeyMetadataResponse {
 
 export interface GetPublicKeyResponse {
   PublicKey: string; // Provider public-key format; TRANSIT asymmetric keys use PEM
+  Version: number;
 }
 
 export interface EncryptResponse {
@@ -218,6 +229,8 @@ export type DecryptResponse = DecryptResponseUtf8 | DecryptResponseBytes;
 
 export interface SignResponse {
   KeyId: string;
+  /** Version used to sign; pass to getPublicKey when verifying. */
+  KeyVersion: number;
   Signature: string; // TRANSIT: vault:v<version>:<base64>; ETHEREUM: provider format
   SigningAlgorithm: string;
 }

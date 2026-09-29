@@ -72,7 +72,12 @@ async function main() {
     signingAlgorithm: "ECDSA_SHA_256",
     messageType: "DIGEST",
   });
-  console.log("Signature (b64, truncated):", ecSig.data.Signature.slice(0, 32) + "...");
+  console.log("Signature (provider format, truncated):", ecSig.data.Signature.slice(0, 32) + "...");
+  const publicKey = await sdk.kms.getPublicKey({
+    keyId: ec.data.KeyMetadata.KeyId,
+    version: ecSig.data.KeyVersion,
+  });
+  console.log("Signing/public-key version:", ecSig.data.KeyVersion, publicKey.data.Version);
 
   // 4. ETHEREUM key — log Address, sign EIP191.
   console.log("\n[4] ETHEREUM key + EIP191");
