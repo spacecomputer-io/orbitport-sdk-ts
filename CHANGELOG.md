@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## [0.3.0] - Unreleased
+
+Includes the fixes prepared for 0.2.2, which was not published to npm.
 
 ### Added
 
@@ -20,22 +22,17 @@ All notable changes to this project will be documented in this file.
 - Removed the deprecated `SYMMETRIC_DEFAULT` key spec from the public TypeScript union. Use `AES_256_GCM96`; this is a source-breaking change for callers still using the old literal.
 - KMS alias validation now matches the gateway contract: letters, digits, dots, and hyphens only.
 - E2E tests accept `ORBITPORT_ACCESS_TOKEN` and `ORBITPORT_API_URL`.
+- `examples/kms.ts` now passes `description` (and a sample `tags` entry) so the example mirrors a complete request.
 
 ### Removed
 
 - Removed OAuth client-credentials authentication and its configuration and response types. Authentication now uses pre-issued bearer tokens; the SDK no longer acquires or refreshes tokens. Storage clearing emits `token_cleared`.
 - Removed cTRNG and its IPFS beacon support, including the SDK namespace, services, types, configuration, validation helpers, error codes, examples, and tests.
 
-## [0.2.2] - 2026-05-12
-
 ### Fixed
 
 - `kms.createKey` now always sends `Description` and `Tags` on the JSON-RPC wire (as `""` / `[]` when the caller omits them). The gateway requires both fields to be present, so the previously-documented minimal payload (`{ alias, keySpec, keyUsage, scheme }`) was rejected with an HTTP 400. `description` and `tags` remain optional in `CreateKeyRequest` — callers need no source change.
 - HTTP error responses now carry the server's response body. `OrbitportSDKError.message` includes the (truncated) body text and `OrbitportSDKError.details.httpBody` holds it verbatim, so plain-text gateway errors such as `Request body deserialize error: missing field` are no longer hidden behind a bare `JSON-RPC HTTP error 400`.
-
-### Changed
-
-- `examples/kms.ts` now passes `description` (and a sample `tags` entry) so the example mirrors a complete request.
 
 ## [0.2.1] - 2026-05-04
 
