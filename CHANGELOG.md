@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.3.0] - Unreleased
+## [0.3.0]
 
 Includes the fixes prepared for 0.2.2, which was not published to npm.
 
