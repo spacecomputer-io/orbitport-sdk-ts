@@ -2,16 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.2] - 2026-05-12
+## [0.3.0]
+
+Includes the fixes prepared for 0.2.2, which was not published to npm.
+
+### Added
+
+- Versioned public-key lookup with `getPublicKey({ keyId, version? })`, a `Version` response field, and `Sign.KeyVersion` so signatures remain verifiable after rotation.
+- Capability tags, key-agreement metadata, and encapsulation support flags on the public scheme capability type.
+- `sdk.kms.getKeyMetadata({ keyId })` and `sdk.kms.getPublicKey({ keyId })` for authenticated, tenant-scoped key lookup and external signature verification. Both accept canonical key IDs or raw aliases.
+- Direct bearer-token authentication through `OrbitportConfig.accessToken`, including PATs issued by the accounts portal. The token is used in memory and redacted from debug/config output.
+- Tenant-scoped JSON key-store methods under `sdk.kms.keyStore`: `put`, `get`, `list`, and `delete`.
+- Lossless parsing for JSON-RPC numbers that JavaScript cannot represent exactly. These values are returned as exported `LosslessNumber` objects.
+- Typed error handling for account/credit failures: HTTP `402` maps to the new `INSUFFICIENT_CREDITS` code and HTTP `503` with the gateway's `account_plugin_unavailable` marker maps to the new `ACCOUNT_UNAVAILABLE` code.
+
+### Changed
+
+- `getCapabilities()` exposes only the public `TRANSIT` and `ETHEREUM` schemes, even when a backend advertises disabled schemes.
+- Removed the deprecated `SYMMETRIC_DEFAULT` key spec from the public TypeScript union. Use `AES_256_GCM96`; this is a source-breaking change for callers still using the old literal.
+- KMS alias validation now matches the gateway contract: letters, digits, dots, and hyphens only.
+- E2E tests accept `ORBITPORT_ACCESS_TOKEN` and `ORBITPORT_API_URL`.
+- `examples/kms.ts` now passes `description` (and a sample `tags` entry) so the example mirrors a complete request.
+
+### Removed
+
+- Removed OAuth client-credentials authentication and its configuration and response types. Authentication now uses pre-issued bearer tokens; the SDK no longer acquires or refreshes tokens. Storage clearing emits `token_cleared`.
+- Removed cTRNG and its IPFS beacon support, including the SDK namespace, services, types, configuration, validation helpers, error codes, examples, and tests.
 
 ### Fixed
 
 - `kms.createKey` now always sends `Description` and `Tags` on the JSON-RPC wire (as `""` / `[]` when the caller omits them). The gateway requires both fields to be present, so the previously-documented minimal payload (`{ alias, keySpec, keyUsage, scheme }`) was rejected with an HTTP 400. `description` and `tags` remain optional in `CreateKeyRequest` — callers need no source change.
 - HTTP error responses now carry the server's response body. `OrbitportSDKError.message` includes the (truncated) body text and `OrbitportSDKError.details.httpBody` holds it verbatim, so plain-text gateway errors such as `Request body deserialize error: missing field` are no longer hidden behind a bare `JSON-RPC HTTP error 400`.
-
-### Changed
-
-- `examples/kms.ts` now passes `description` (and a sample `tags` entry) so the example mirrors a complete request.
 
 ## [0.2.1] - 2026-05-04
 

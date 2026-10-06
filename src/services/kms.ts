@@ -1,7 +1,5 @@
 /**
  * Key Management Service (KMS) — JSON-RPC 2.0 client.
- *
- * Mirrors the CTRNGService construction shape (config + token factory).
  */
 
 import type {
@@ -11,6 +9,10 @@ import type {
   ServiceResult,
   CreateKeyRequest,
   CreateKeyResponse,
+  GetKeyMetadataRequest,
+  GetKeyMetadataResponse,
+  GetPublicKeyRequest,
+  GetPublicKeyResponse,
   EncryptRequest,
   EncryptResponse,
   DecryptRequest,
@@ -22,6 +24,14 @@ import type {
   GenerateDataKeyResponse,
   RotateKeyRequest,
   RotateKeyResponse,
+  KeyStorePutRequest,
+  KeyStorePutResponse,
+  KeyStoreGetRequest,
+  KeyStoreGetResponse,
+  KeyStoreListRequest,
+  KeyStoreListResponse,
+  KeyStoreDeleteRequest,
+  KeyStoreDeleteResponse,
   GetCapabilitiesResponse,
 } from '../types';
 import { OrbitportSDKError, ERROR_CODES } from '../utils/errors';
@@ -34,11 +44,17 @@ import {
 } from '../utils/base64';
 import {
   sanitizeCreateKeyRequest,
+  sanitizeGetKeyMetadataRequest,
+  sanitizeGetPublicKeyRequest,
   sanitizeEncryptRequest,
   sanitizeDecryptRequest,
   sanitizeSignRequest,
   sanitizeGenerateDataKeyRequest,
   sanitizeRotateKeyRequest,
+  sanitizeKeyStorePutRequest,
+  sanitizeKeyStoreGetRequest,
+  sanitizeKeyStoreListRequest,
+  sanitizeKeyStoreDeleteRequest,
 } from '../utils/validation';
 
 export class KMSService {
@@ -60,12 +76,34 @@ export class KMSService {
     this.debug = debug;
   }
 
+  updateConfig(config: OrbitportConfig): void {
+    this.config = config;
+  }
+
   async createKey(
     req: CreateKeyRequest,
     options: RequestOptions = {},
   ): Promise<ServiceResult<CreateKeyResponse>> {
     const params = sanitizeCreateKeyRequest(req);
     return this._call<CreateKeyResponse>('kms.CreateKey', params, options);
+  }
+
+  /** Returns tenant-scoped metadata for a key ID or alias. */
+  async getKeyMetadata(
+    req: GetKeyMetadataRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<GetKeyMetadataResponse>> {
+    const params = sanitizeGetKeyMetadataRequest(req);
+    return this._call<GetKeyMetadataResponse>('kms.GetKeyMetadata', params, options);
+  }
+
+  /** Returns the current or requested version of an asymmetric public key. */
+  async getPublicKey(
+    req: GetPublicKeyRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<GetPublicKeyResponse>> {
+    const params = sanitizeGetPublicKeyRequest(req);
+    return this._call<GetPublicKeyResponse>('kms.GetPublicKey', params, options);
   }
 
   async encrypt(
@@ -152,14 +190,57 @@ export class KMSService {
     return this._call<RotateKeyResponse>('kms.RotateKey', params, options);
   }
 
+
+  async putSecret(
+    req: KeyStorePutRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStorePutResponse>> {
+    const params = sanitizeKeyStorePutRequest(req);
+    return this._call<KeyStorePutResponse>('kms_keystore.Put', params, options);
+  }
+
+  async getSecret(
+    req: KeyStoreGetRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStoreGetResponse>> {
+    const params = sanitizeKeyStoreGetRequest(req);
+    return this._call<KeyStoreGetResponse>('kms_keystore.Get', params, options);
+  }
+
+  async listSecrets(
+    req: KeyStoreListRequest = {},
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStoreListResponse>> {
+    const params = sanitizeKeyStoreListRequest(req);
+    return this._call<KeyStoreListResponse>('kms_keystore.List', params, options);
+  }
+
+  async deleteSecret(
+    req: KeyStoreDeleteRequest,
+    options: RequestOptions = {},
+  ): Promise<ServiceResult<KeyStoreDeleteResponse>> {
+    const params = sanitizeKeyStoreDeleteRequest(req);
+    return this._call<KeyStoreDeleteResponse>('kms_keystore.Delete', params, options);
+  }
+
   async getCapabilities(
     options: RequestOptions = {},
   ): Promise<ServiceResult<GetCapabilitiesResponse>> {
-    return this._call<GetCapabilitiesResponse>(
+    const response = await this._call<GetCapabilitiesResponse>(
       'kms.GetCapabilities',
       {},
       options,
     );
+    return {
+      ...response,
+      data: {
+        Schemes: response.data.Schemes.filter(
+          (capability) =>
+            capability.Scheme === 'TRANSIT' ||
+            capability.Scheme === 'ETHEREUM',
+        ),
+      },
+    };
   }
 
   /**
@@ -179,13 +260,6 @@ export class KMSService {
     params: Record<string, unknown>,
     options: RequestOptions,
   ): Promise<{ result: T; metadata: ResponseMetadata }> {
-    if (!this.config.clientId || !this.config.clientSecret) {
-      throw new OrbitportSDKError(
-        'KMS requires API credentials (clientId and clientSecret)',
-        ERROR_CODES.AUTH_FAILED,
-      );
-    }
-
     const token = await this.getToken();
     if (!token) {
       throw new OrbitportSDKError(
